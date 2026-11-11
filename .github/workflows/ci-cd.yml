@@ -1,0 +1,160 @@
+name: CI-CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Qualidade: lint, testes unitários + integração (infra real via compose), gate de cobertura.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Lint & Testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "Arquivos não formatados:"; echo "$unformatted"; exit 1; fi
+
+      - name: go vet
+        run: go vet ./... && go vet -tags=integration ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.5
+
+      - name: Script SQL do K8s sincronizado
+        run: cmp scripts/db/init.sql deploy/k8s/local/init.sql
+
+      - name: Subir infraestrutura (Postgres, Redis, RabbitMQ, S3)
+        run: docker compose up -d --wait postgres redis rabbitmq s3
+
+      - name: Testes (unitários + integração, race detector)
+        run: |
+          go test -race -tags=integration -count=1 \
+            -coverpkg=./internal/... -coverprofile=coverage.out ./...
+
+      - name: Gate de cobertura (>= 80%)
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print $3}')
+          echo "Cobertura total: ${total}%"
+          echo "### Cobertura: ${total}%" >> "$GITHUB_STEP_SUMMARY"
+          awk -v t="$total" 'BEGIN { exit (t >= 80) ? 0 : 1 }' || { echo "Cobertura abaixo de 80%"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage.out
+
+  # ---------------------------------------------------------------------------
+  # Teste ponta a ponta: sobe o sistema completo e exercita o fluxo pelo gateway.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E (docker compose)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Subir sistema completo
+        run: docker compose up -d --build --wait --wait-timeout 300
+      - name: Executar E2E
+        run: ./scripts/e2e.sh
+      - name: Logs em caso de falha
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+      - name: Derrubar ambiente
+        if: always()
+        run: docker compose down -v
+
+  # ---------------------------------------------------------------------------
+  # CD: publica as imagens no GHCR (somente main).
+  # ---------------------------------------------------------------------------
+  build-push:
+    name: Imagem ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: [test, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - { service: auth-service, target: service, dockerfile: Dockerfile }
+          - { service: video-service, target: service, dockerfile: Dockerfile }
+          - { service: notification-service, target: service, dockerfile: Dockerfile }
+          - { service: processor-worker, target: worker, dockerfile: Dockerfile }
+          - { service: gateway, target: "", dockerfile: deploy/gateway/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          build-args: SERVICE=${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ---------------------------------------------------------------------------
+  # CD: deploy no Kubernetes. Habilite com a variável de repositório DEPLOY_ENABLED=true
+  # e o secret KUBE_CONFIG (kubeconfig em base64) do cluster de destino.
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v4
+      - name: Configurar kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+      - name: Fixar imagens na SHA do commit
+        working-directory: deploy/k8s/base
+        run: |
+          sed -i "s/newTag: latest/newTag: ${GITHUB_SHA}/" kustomization.yaml
+          kubectl kustomize . | grep "image: ghcr.io"
+      - name: Aplicar manifests
+        run: kubectl apply -k deploy/k8s/base
+      - name: Aguardar rollout
+        run: |
+          for d in auth-service video-service processor-worker notification-service gateway; do
+            kubectl -n fiapx rollout status deployment/$d --timeout=5m
+          done

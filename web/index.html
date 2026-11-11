@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FIAP X - Processador de Vídeos</title>
+  <style>
+    :root { --bg:#f5f6fa; --card:#fff; --text:#1f2430; --muted:#6b7280; --accent:#c8102e; --ok:#15803d; --warn:#b45309; --err:#b91c1c; --info:#1d4ed8; --border:#e5e7eb; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#111318; --card:#1b1e25; --text:#e8eaf0; --muted:#9aa1ad; --border:#2c313b; } }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
+    header { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-bottom:1px solid var(--border); background:var(--card); }
+    header h1 { margin:0; font-size:20px; } header h1 span { color:var(--accent); }
+    main { max-width:960px; margin:24px auto; padding:0 16px; display:grid; gap:20px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; }
+    h2 { margin:0 0 12px; font-size:17px; }
+    label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+    input { width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text); font-size:14px; }
+    button { margin-top:14px; padding:10px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; }
+    button.secondary { background:transparent; color:var(--text); border:1px solid var(--border); }
+    button:disabled { opacity:.6; cursor:default; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    @media (max-width: 720px) { .row { grid-template-columns:1fr; } }
+    .msg { margin-top:10px; font-size:14px; min-height:1em; } .msg.err { color:var(--err); } .msg.ok { color:var(--ok); }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+    th { color:var(--muted); font-weight:500; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600; color:#fff; }
+    .PENDING { background:var(--muted); } .PROCESSING { background:var(--info); } .COMPLETED { background:var(--ok); } .FAILED { background:var(--err); }
+    .error-text { color:var(--err); font-size:12px; margin-top:4px; }
+    .hidden { display:none; }
+    .table-wrap { overflow-x:auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>FIAP <span>X</span> · Processador de Vídeos</h1>
+    <div id="userBox" class="hidden"><span id="userName"></span> <button class="secondary" id="logoutBtn">Sair</button></div>
+  </header>
+  <main>
+    <section id="authSection" class="row">
+      <form class="card" id="loginForm">
+        <h2>Entrar</h2>
+        <label for="loginEmail">E-mail</label><input id="loginEmail" type="email" required autocomplete="email">
+        <label for="loginPassword">Senha</label><input id="loginPassword" type="password" required autocomplete="current-password">
+        <button type="submit">Entrar</button>
+        <div class="msg" id="loginMsg"></div>
+      </form>
+      <form class="card" id="registerForm">
+        <h2>Criar conta</h2>
+        <label for="regName">Nome</label><input id="regName" required>
+        <label for="regEmail">E-mail</label><input id="regEmail" type="email" required autocomplete="email">
+        <label for="regPassword">Senha (mín. 8 caracteres)</label><input id="regPassword" type="password" minlength="8" required autocomplete="new-password">
+        <button type="submit">Cadastrar</button>
+        <div class="msg" id="registerMsg"></div>
+      </form>
+    </section>
+
+    <section id="appSection" class="hidden">
+      <form class="card" id="uploadForm">
+        <h2>Enviar vídeos</h2>
+        <p style="color:var(--muted);font-size:14px;margin:0">Selecione um ou mais vídeos (mp4, avi, mov, mkv, webm, wmv, flv, m4v). O processamento é assíncrono: acompanhe o status abaixo.</p>
+        <input id="videoInput" type="file" accept="video/*,.mkv,.avi,.flv,.wmv" multiple required style="margin-top:12px">
+        <button type="submit" id="uploadBtn">Enviar</button>
+        <div class="msg" id="uploadMsg"></div>
+      </form>
+      <div class="card" style="margin-top:20px">
+        <h2>Meus vídeos <button class="secondary" id="refreshBtn" style="margin:0 0 0 8px;padding:4px 10px">Atualizar</button></h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Arquivo</th><th>Status</th><th>Frames</th><th>Enviado em</th><th></th></tr></thead>
+            <tbody id="videosBody"><tr><td colspan="5">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let token = localStorage.getItem('fiapx_token');
+    let user = JSON.parse(localStorage.getItem('fiapx_user') || 'null');
+    let timer = null;
+
+    function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
+    function setMsg(el, text, ok) { el.textContent = text; el.className = 'msg ' + (ok ? 'ok' : 'err'); }
+    function fmtSize(b) { if (!b) return '0 B'; const u = ['B','KB','MB','GB']; const i = Math.min(Math.floor(Math.log(b)/Math.log(1024)), 3); return (b/Math.pow(1024,i)).toFixed(1) + ' ' + u[i]; }
+    const labels = { PENDING: 'Na fila', PROCESSING: 'Processando', COMPLETED: 'Concluído', FAILED: 'Falhou' };
+
+    async function api(path, opts = {}) {
+      const headers = Object.assign({}, opts.headers || {});
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const res = await fetch(path, Object.assign({}, opts, { headers }));
+      if (res.status === 401 && token) { logout(); throw new Error('Sessão expirada, entre novamente.'); }
+      return res;
+    }
+
+    function render() {
+      const logged = !!token;
+      $('authSection').classList.toggle('hidden', logged);
+      $('appSection').classList.toggle('hidden', !logged);
+      $('userBox').classList.toggle('hidden', !logged);
+      $('userName').textContent = user ? user.name : '';
+      clearInterval(timer);
+      if (logged) { loadVideos(); timer = setInterval(loadVideos, 4000); }
+    }
+
+    function logout() { token = null; user = null; localStorage.removeItem('fiapx_token'); localStorage.removeItem('fiapx_user'); render(); }
+
+    $('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const res = await fetch('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: $('loginEmail').value, password: $('loginPassword').value }) });
+        const data = await res.json();
+        if (!res.ok) return setMsg($('loginMsg'), data.error || 'Falha no login');
+        token = data.access_token; user = data.user;
+        localStorage.setItem('fiapx_token', token); localStorage.setItem('fiapx_user', JSON.stringify(user));
+        render();
+      } catch (err) { setMsg($('loginMsg'), err.message); }
+    });
+
+    $('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const res = await fetch('/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: $('regName').value, email: $('regEmail').value, password: $('regPassword').value }) });
+        const data = await res.json();
+        if (!res.ok) return setMsg($('registerMsg'), data.error || 'Falha no cadastro');
+        setMsg($('registerMsg'), 'Conta criada! Faça login ao lado.', true);
+        $('loginEmail').value = $('regEmail').value;
+      } catch (err) { setMsg($('registerMsg'), err.message); }
+    });
+
+    $('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const files = Array.from($('videoInput').files);
+      if (!files.length) return;
+      $('uploadBtn').disabled = true;
+      setMsg($('uploadMsg'), `Enviando ${files.length} arquivo(s)...`, true);
+      // Envia em paralelo: o backend aceita e enfileira cada vídeo de forma independente.
+      const results = await Promise.allSettled(files.map(async (f) => {
+        const fd = new FormData(); fd.append('video', f);
+        const res = await api('/api/videos', { method: 'POST', body: fd });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(f.name + ': ' + (d.error || res.status)); }
+      }));
+      const failed = results.filter(r => r.status === 'rejected').map(r => r.reason.message);
+      setMsg($('uploadMsg'), failed.length ? 'Erros: ' + failed.join('; ') : `${files.length} vídeo(s) enviados para processamento.`, !failed.length);
+      $('uploadBtn').disabled = false; $('videoInput').value = '';
+      loadVideos();
+    });
+
+    async function loadVideos() {
+      try {
+        const res = await api('/api/videos');
+        if (!res.ok) return;
+        const { videos } = await res.json();
+        const body = $('videosBody');
+        if (!videos.length) { body.innerHTML = '<tr><td colspan="5">Nenhum vídeo enviado ainda.</td></tr>'; return; }
+        body.innerHTML = videos.map(v => `
+          <tr>
+            <td>${esc(v.original_name)}<div style="color:var(--muted);font-size:12px">${fmtSize(v.size_bytes)}</div>
+              ${v.error ? `<div class="error-text">${esc(v.error)}</div>` : ''}</td>
+            <td><span class="badge ${esc(v.status)}">${esc(labels[v.status] || v.status)}</span></td>
+            <td>${v.frame_count || '-'}</td>
+            <td>${new Date(v.created_at).toLocaleString('pt-BR')}</td>
+            <td>${v.download_url ? `<button class="secondary" style="margin:0" data-id="${esc(v.id)}" data-name="${esc(v.original_name)}">Baixar ZIP</button>` : ''}</td>
+          </tr>`).join('');
+      } catch (err) { console.error(err); }
+    }
+
+    $('videosBody').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-id]');
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        const res = await api(`/api/videos/${encodeURIComponent(btn.dataset.id)}/download`);
+        if (!res.ok) throw new Error('Falha no download');
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = btn.dataset.name.replace(/\.[^.]+$/, '') + '_frames.zip';
+        a.click(); URL.revokeObjectURL(a.href);
+      } catch (err) { alert(err.message); } finally { btn.disabled = false; }
+    });
+
+    $('refreshBtn').addEventListener('click', loadVideos);
+    $('logoutBtn').addEventListener('click', logout);
+    render();
+  </script>
+</body>
+</html>

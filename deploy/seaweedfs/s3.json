@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "fiapx",
+      "credentials": [
+        { "accessKey": "fiapx-access-key", "secretKey": "fiapx-secret-key" }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+.git
+.github
+docs
+deploy/k8s
+deploy/grafana
+deploy/prometheus
+scripts
+*.md
+coverage.out

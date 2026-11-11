@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: fiapx
+
+resources:
+  - namespace.yaml
+  - config.yaml
+  - auth-service.yaml
+  - video-service.yaml
+  - processor-worker.yaml
+  - notification-service.yaml
+  - gateway.yaml
+
+# O CI/CD troca as tags pela SHA do commit (kustomize edit set image).
+images:
+  - name: fiapx/auth-service
+    newName: ghcr.io/monnclaro/soat-hackaton/auth-service
+    newTag: latest
+  - name: fiapx/video-service
+    newName: ghcr.io/monnclaro/soat-hackaton/video-service
+    newTag: latest
+  - name: fiapx/processor-worker
+    newName: ghcr.io/monnclaro/soat-hackaton/processor-worker
+    newTag: latest
+  - name: fiapx/notification-service
+    newName: ghcr.io/monnclaro/soat-hackaton/notification-service
+    newTag: latest
+  - name: fiapx/gateway
+    newName: ghcr.io/monnclaro/soat-hackaton/gateway
+    newTag: latest
