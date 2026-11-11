@@ -1,0 +1,12 @@
+# Binários e artefatos
+/bin/
+*.exe
+*.test
+coverage.out
+*.coverprofile
+
+# Ambiente
+.env
+.idea/
+.vscode/
+.DS_Store
