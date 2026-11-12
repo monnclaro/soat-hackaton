@@ -244,10 +244,14 @@ func (f extractorFunc) Extract(ctx context.Context, v, o string) ([]string, erro
 func TestConcurrentJobs(t *testing.T) {
 	p, st, pub := newProcessor(t, fakeExtractor{frames: 2})
 	const n = 20
-	var wg sync.WaitGroup
+	// Popula o storage antes de iniciar as goroutines (escrever no mapa durante os Gets é data race).
+	evts := make([]events.VideoUploaded, n)
 	for i := range n {
-		evt := uploaded(fmt.Sprintf("c%d", i))
-		st.objects[evt.StorageKey] = []byte("x")
+		evts[i] = uploaded(fmt.Sprintf("c%d", i))
+		st.objects[evts[i].StorageKey] = []byte("x")
+	}
+	var wg sync.WaitGroup
+	for _, evt := range evts {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
