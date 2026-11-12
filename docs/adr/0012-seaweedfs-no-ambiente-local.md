@@ -19,5 +19,5 @@ Usar **SeaweedFS** (`chrislusf/seaweedfs`) com o gateway S3 (`-s3`, porta 8333) 
 ## Consequências
 
 - Ambiente local e CI sobem sem credenciais externas.
-- Em produção, o mesmo binário usa AWS S3 (`S3_ENDPOINT=s3.amazonaws.com`, `S3_USE_SSL=true`).
+- O SeaweedFS pode ser usado também em produção (self-hosted, inclusive no Kubernetes via `deploy/k8s/local/infra.yaml`), sem depender de nuvem. Se preferirem um serviço gerenciado, qualquer provedor compatível com S3 funciona só com configuração (ex.: Cloudflare R2, Backblaze B2, AWS S3).
 - Os testes de integração (`TestS3Storage`) validam o adaptador contra uma implementação S3 real.

@@ -17,7 +17,7 @@ flowchart LR
     AUTH --> PGA[(Postgres<br/>fiapx_auth)]
     VID --> PGV[(Postgres<br/>fiapx_videos<br/>+ outbox)]
     VID --> R[(Redis<br/>cache)]
-    VID -->|vídeo original| S3[(Object Storage S3<br/>SeaweedFS / AWS S3)]
+    VID -->|vídeo original| S3[(Object storage<br/>compatível com S3<br/>SeaweedFS)]
 
     VID -->|outbox relay<br/>video.uploaded| MQ{{RabbitMQ<br/>exchange fiapx.events}}
     MQ -->|processor.video-uploaded| W1[processor-worker #1]
@@ -26,7 +26,7 @@ flowchart LR
     W1 & W2 -->|video.status.*| MQ
     MQ -->|video-service.status-changed| VID
     MQ -->|notification.video-failed| NOT[notification-service]
-    NOT -->|SMTP| MAIL[E-mail<br/>Mailpit / SES]
+    NOT -->|SMTP| MAIL[E-mail<br/>Mailpit / SMTP]
 
     PROM[Prometheus] -.scrape /metrics.-> AUTH & VID & W1 & W2 & NOT & MQ
     GRAF[Grafana] -.-> PROM
@@ -48,7 +48,7 @@ flowchart LR
 | Não perder requisições em picos | (1) O upload só retorna `202` depois que o vídeo está no S3 e o registro + mensagem estão no Postgres **na mesma transação** (*transactional outbox*). (2) O relay publica com *publisher confirms* e só marca como publicada após o ack do broker. (3) As filas são **quorum queues** duráveis com mensagens persistentes. (4) O worker só dá *ack* ao terminar; se o pod morrer, a mensagem é reentregue. (5) O pico vira fila, não erro. |
 | Protegido por usuário e senha | auth-service com senha em bcrypt e JWT HS256. Todas as rotas `/api/*` exigem `Authorization: Bearer`, e cada usuário só vê os próprios vídeos. |
 | Listagem de status por usuário | `GET /api/videos` com cache-aside no Redis (TTL curto + invalidação a cada mudança de status). |
-| Notificação em caso de erro | O worker publica `video.status.failed` e o notification-service envia o e-mail (Mailpit local; SES/SMTP em produção). |
+| Notificação em caso de erro | O worker publica `video.status.failed` e o notification-service envia o e-mail (Mailpit local; qualquer servidor SMTP em produção). |
 | Persistência | PostgreSQL (database-per-service) + object storage S3 + Redis com AOF. |
 | Arquitetura escalável | Serviços stateless, storage compartilhado (S3) no lugar do disco local, mensageria, HPA, KEDA opcional. |
 | Testes | Unitários (domínio, casos de uso, HTTP, worker), integração com infraestrutura real (Postgres, Redis, RabbitMQ, S3) e E2E do fluxo completo. Gate de cobertura de 80% no CI. |
@@ -205,7 +205,7 @@ Versão completa (contexto, alternativas descartadas e consequências) em [docs/
 | 1 | Go + `net/http` da stdlib | Mesmo stack do projeto base; roteamento com padrões já existe no Go 1.22+ | Menos "açúcar" que gin |
 | 2 | RabbitMQ com quorum queues | Ack manual, DLX, delivery-limit e replicação; adequado a filas de trabalho | Kafka seria melhor para replay/streams, mas é mais pesado de operar |
 | 3 | Transactional outbox | Evita *dual write* (DB ok, broker fora), que perderia o pedido | Latência extra de até 1s para enfileirar |
-| 4 | Object storage S3 em vez de disco | Workers e API em máquinas diferentes compartilham arquivos; escala | Mais um componente (SeaweedFS local; AWS S3 em produção) |
+| 4 | Object storage compatível com S3 em vez de disco | Workers e API em máquinas diferentes compartilham arquivos; escala | Mais um componente (SeaweedFS self-hosted; qualquer provedor compatível com S3) |
 | 5 | Upload em streaming (multipart → S3) | Não bufferiza vídeos de GB em memória/disco da API | — |
 | 6 | Database-per-service | Baixo acoplamento entre auth e vídeos | `user_email` é desnormalizado no vídeo para a notificação |
 | 7 | JWT stateless com segredo compartilhado | Qualquer réplica valida sem consultar o auth-service | Revogação só por expiração (TTL 24h configurável) |
@@ -213,6 +213,18 @@ Versão completa (contexto, alternativas descartadas e consequências) em [docs/
 | 9 | Crash-only nos consumidores | Perda de conexão com o broker encerra o processo e o orquestrador reinicia | Reinício em vez de reconexão in-process |
 | 10 | SeaweedFS no ambiente local | O MinIO deixou de publicar imagens públicas; o SeaweedFS é S3-compatível e mantido | — |
 
-## 10. Produção (AWS, sugestão)
+## 10. Produção (agnóstico de nuvem)
 
-EKS (manifests em `deploy/k8s/base`), RDS PostgreSQL, ElastiCache Redis, Amazon MQ for RabbitMQ, S3, SES (SMTP) e Prometheus/Grafana (ou Amazon Managed Prometheus/Grafana). A troca é só de configuração: endpoints e credenciais nos Secrets.
+O projeto **não depende de nenhum provedor de nuvem**. Todas as peças são open source e rodam em qualquer Kubernetes: on-premises, k3s, minikube/kind ou o Kubernetes gerenciado de qualquer nuvem.
+
+- **Tudo self-hosted:** `kubectl apply -k deploy/k8s/local` sobe as aplicações junto com PostgreSQL, Redis, RabbitMQ, SeaweedFS (S3) e Mailpit em pods. Para produção, troque o Mailpit por um servidor SMTP real e aumente réplicas e volumes da infraestrutura.
+- **Serviços gerenciados (opcional):** aplique só `deploy/k8s/base` e aponte os Secrets/ConfigMap para os equivalentes gerenciados do provedor escolhido. A troca é só de configuração (endpoints e credenciais):
+
+| Componente | Self-hosted (padrão) | Exemplos gerenciados (qualquer provedor) |
+|---|---|---|
+| PostgreSQL | StatefulSet `postgres` | Qualquer PostgreSQL gerenciado |
+| Redis | Deployment `redis` | Qualquer Redis gerenciado |
+| RabbitMQ | StatefulSet `rabbitmq` (ou RabbitMQ Cluster Operator) | CloudAMQP ou o RabbitMQ gerenciado da nuvem |
+| Object storage | SeaweedFS (ou Garage, Ceph, MinIO) | Cloudflare R2, Backblaze B2, DigitalOcean Spaces, Wasabi, AWS S3... |
+| E-mail | Qualquer servidor SMTP | Qualquer provedor SMTP |
+| Monitoramento | Prometheus + Grafana | Grafana Cloud ou equivalentes |

@@ -1,4 +1,4 @@
-# ADR 0004 — Object Storage S3 no Lugar do Disco Local
+# ADR 0004 — Object Storage Compatível com S3 no Lugar do Disco Local
 
 **Status:** Aceito
 
@@ -8,7 +8,7 @@ O projeto base grava os vídeos em `./uploads` e os ZIPs em `./outputs`, no disc
 
 ## Decisão
 
-Armazenar vídeos e ZIPs em **object storage compatível com S3**:
+Armazenar vídeos e ZIPs em **object storage compatível com a API S3**. "S3" aqui é o protocolo, não um fornecedor: o código usa um cliente S3 genérico e roda com qualquer implementação (SeaweedFS self-hosted por padrão). Estrutura dos objetos:
 
 - `videos/<user_id>/<video_id>.<ext>`: vídeo original, gravado pelo video-service.
 - `outputs/<user_id>/<video_id>.zip`: frames, gravado pelo worker.
@@ -29,5 +29,5 @@ O worker usa um diretório temporário por job (`emptyDir` no K8s), removido ao 
 
 - API e workers ficam stateless e escalam livremente.
 - Vídeos de até `MAX_UPLOAD_BYTES` (1 GiB por padrão) não pressionam a memória da API.
-- Em produção basta trocar `S3_ENDPOINT`/credenciais para AWS S3; no local usa-se SeaweedFS ([ADR 0012](./0012-seaweedfs-no-ambiente-local.md)).
+- O projeto não depende de nenhuma nuvem: o padrão é o SeaweedFS self-hosted, e qualquer serviço compatível com S3 (Garage, Ceph, Cloudflare R2, Backblaze B2, AWS S3...) funciona trocando `S3_ENDPOINT`/credenciais ([ADR 0012](./0012-seaweedfs-no-ambiente-local.md)).
 - Se o registro no banco falhar após o upload, o objeto é removido (compensação).

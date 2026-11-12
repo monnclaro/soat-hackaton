@@ -28,4 +28,4 @@ Desacoplar aceitação e processamento com mensageria:
 - Picos viram backlog na fila, não erros: a API continua respondendo e os workers drenam no ritmo deles.
 - Entrega *at-least-once*: os consumidores precisam ser idempotentes ([ADR 0008](./0008-retentativas-dlq-e-idempotencia.md)).
 - O status é eventualmente consistente; a UI consulta a listagem por polling.
-- O RabbitMQ vira dependência crítica; em produção, usar Amazon MQ ou cluster de 3 nós.
+- O RabbitMQ vira dependência crítica; em produção, usar um cluster de 3 nós (ou um RabbitMQ gerenciado).

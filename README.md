@@ -21,7 +21,7 @@
 3. [Arquitetura](#3-arquitetura)
 4. [Microsserviços](#4-microsserviços)
 5. [Stack tecnológica](#5-stack-tecnológica)
-6. [Como executar (Docker Compose)](#6-como-executar-docker-compose)
+6. [Como executar](#6-como-executar): Docker Compose, na mão, sem Docker, Kubernetes
 7. [Usando o sistema pela interface web](#7-usando-o-sistema-pela-interface-web)
 8. [Referência da API](#8-referência-da-api)
 9. [Ciclo de vida de um vídeo](#9-ciclo-de-vida-de-um-vídeo)
@@ -35,7 +35,7 @@
 17. [Kubernetes](#17-kubernetes)
 18. [Configuração (variáveis de ambiente)](#18-configuração-variáveis-de-ambiente)
 19. [Estrutura do repositório](#19-estrutura-do-repositório)
-20. [Desenvolvimento local sem Docker](#20-desenvolvimento-local-sem-docker)
+20. [Fluxo de desenvolvimento](#20-fluxo-de-desenvolvimento)
 21. [Solução de problemas](#21-solução-de-problemas)
 22. [Roteiro sugerido para o vídeo de apresentação](#22-roteiro-sugerido-para-o-vídeo-de-apresentação)
 
@@ -152,7 +152,7 @@ Para os diagramas de sequência (upload, processamento, falha), a máquina de es
 
 ### notification-service — [internal/notification](internal/notification)
 - Consome `notification.video-failed` e envia um e-mail com o nome do arquivo, o motivo e o ID do vídeo.
-- SMTP configurável: Mailpit no ambiente local, Amazon SES ou outro provedor em produção.
+- SMTP configurável: Mailpit no ambiente local, qualquer servidor ou provedor SMTP em produção.
 
 ---
 
@@ -164,7 +164,7 @@ Para os diagramas de sequência (upload, processamento, falha), a máquina de es
 | Mensageria | **RabbitMQ 4.1** (quorum queues) | Work queue com ack manual, DLX, delivery-limit |
 | Banco | **PostgreSQL 17** | Transações (outbox), confiável, recomendado |
 | Cache | **Redis 7** | Alivia o polling da listagem |
-| Arquivos | **S3** (SeaweedFS local / AWS S3) | Compartilhado entre API e workers ([ADR 0004](docs/adr/0004-object-storage-s3.md)) |
+| Arquivos | **Object storage compatível com S3**: SeaweedFS self-hosted | Compartilhado entre API e workers, sem depender de nuvem ([ADR 0004](docs/adr/0004-object-storage-s3.md)) |
 | Processamento | **ffmpeg** | Mesmo motor do projeto base |
 | E-mail (local) | **Mailpit** | Captura os e-mails com UI web |
 | Gateway | **nginx 1.27** | Proxy reverso + arquivos estáticos |
@@ -176,28 +176,64 @@ Bibliotecas Go: `pgx/v5`, `amqp091-go`, `go-redis/v9`, `minio-go/v7` (cliente S3
 
 ---
 
-## 6. Como executar (Docker Compose)
+## 6. Como executar
 
-### Pré-requisitos
-- **Docker Desktop** (ou Docker Engine) com **Compose v2**.
-- Portas livres: 8080, 3000, 9090, 15672, 8025, 5432, 6379, 5672, 8333.
+Há quatro formas de rodar o projeto. Escolha conforme o objetivo:
 
-### Subir tudo
+| Opção | Quando usar | O que precisa instalar |
+|---|---|---|
+| [**6.1 Docker Compose**](#61-opção-a--docker-compose-recomendado) (recomendado) | Demonstração, avaliação, testar o sistema completo | Docker |
+| [**6.2 Serviços na mão + infra no Docker**](#62-opção-b--serviços-go-na-mão--infraestrutura-no-docker) | Desenvolver/depurar os serviços Go (breakpoints, `go run`) | Docker, Go, ffmpeg |
+| [**6.3 Tudo na mão, sem Docker**](#63-opção-c--tudo-na-mão-sem-docker) | Ambiente sem Docker | Go, ffmpeg, PostgreSQL, Redis, RabbitMQ, SeaweedFS, Mailpit |
+| [**6.4 Kubernetes**](#64-opção-d--kubernetes-minikube) | Demonstrar HPA, réplicas e deploy | Docker, minikube, kubectl |
+
+Em todas as opções, comece clonando o repositório:
 
 ```bash
 git clone https://github.com/monnclaro/soat-hackaton.git
 cd soat-hackaton
+```
+
+### Portas usadas
+
+| Porta | Componente | Porta | Componente |
+|---|---|---|---|
+| 8080 | Gateway (UI + API) | 5432 | PostgreSQL |
+| 8081 | auth-service | 6379 | Redis |
+| 8082 | video-service | 5672 / 15672 / 15692 | RabbitMQ (AMQP / painel / métricas) |
+| 8083 | processor-worker | 8333 | SeaweedFS (S3) |
+| 8084 | notification-service | 1025 / 8025 | Mailpit (SMTP / painel) |
+| 3000 | Grafana | 9090 | Prometheus |
+
+---
+
+### 6.1 Opção A — Docker Compose (recomendado)
+
+Sobe **tudo** (4 microsserviços, gateway, PostgreSQL, Redis, RabbitMQ, SeaweedFS, Mailpit, Prometheus e Grafana) com um comando.
+
+**Pré-requisitos:** Docker Desktop (Windows/macOS) ou Docker Engine (Linux) com **Compose v2**. Confira com `docker compose version`.
+
+**Passo 1. Subir o ambiente**
+
+```bash
 docker compose up -d --build
 ```
 
-Na primeira vez, as imagens levam alguns minutos para baixar e compilar. Para acompanhar:
+Na primeira vez leva alguns minutos (download das imagens e compilação dos serviços Go).
+
+> **Já tem um PostgreSQL instalado na máquina, ocupando a porta 5432?** Use outra porta no host:
+> - bash: `POSTGRES_HOST_PORT=55432 docker compose up -d --build`
+> - PowerShell: `$env:POSTGRES_HOST_PORT=55432; docker compose up -d --build`
+
+**Passo 2. Conferir se está tudo no ar**
 
 ```bash
-docker compose ps          # todos devem estar "Up" / "healthy"
-docker compose logs -f video-service processor-worker
+docker compose ps
 ```
 
-### Endereços
+Todos os containers devem estar `Up`, e os de infraestrutura `(healthy)`. Os serviços Go aguardam as dependências e se conectam sozinhos; se algum reiniciar uma ou duas vezes no início, é normal.
+
+**Passo 3. Abrir a aplicação**
 
 | Serviço | URL | Credenciais |
 |---|---|---|
@@ -209,16 +245,212 @@ docker compose logs -f video-service processor-worker
 | S3 (SeaweedFS) | http://localhost:8333 | `fiapx-access-key` / `fiapx-secret-key` |
 | PostgreSQL | `localhost:5432` | `fiapx` / `fiapx` |
 
-### Comandos úteis
+Siga a [seção 7](#7-usando-o-sistema-pela-interface-web) para usar o sistema.
+
+**Passo 4 (opcional). Validar automaticamente com o teste ponta a ponta**
 
 ```bash
-docker compose up -d --scale processor-worker=4   # 4 workers × 2 = 8 vídeos simultâneos
-docker compose logs -f processor-worker           # acompanhar o processamento
-docker compose down                                # parar (mantém os dados)
-docker compose down -v                             # parar e apagar todos os dados
+./scripts/e2e.sh        # Linux/macOS/Git Bash; requer curl e unzip
 ```
 
-> **Já tem um Postgres local na porta 5432?** Suba com `POSTGRES_HOST_PORT=55432 docker compose up -d --build`. Os serviços continuam usando a porta interna 5432; só a porta exposta no host muda.
+**Comandos do dia a dia**
+
+```bash
+docker compose logs -f processor-worker            # acompanhar o processamento
+docker compose logs -f video-service               # logs da API
+docker compose up -d --scale processor-worker=4    # 4 workers × 2 = 8 vídeos simultâneos
+docker compose up -d --build video-service         # recompilar só um serviço após mudar o código
+docker compose restart notification-service        # reiniciar um serviço
+docker compose exec postgres psql -U fiapx -d fiapx_videos   # abrir o banco
+docker compose stop                                # pausar (mantém containers e dados)
+docker compose down                                # remover containers (mantém os dados)
+docker compose down -v                             # remover tudo, inclusive os dados
+```
+
+---
+
+### 6.2 Opção B — Serviços Go na mão + infraestrutura no Docker
+
+Ideal para desenvolver: a infraestrutura sobe no Docker e os microsserviços rodam direto na sua máquina com `go run` (ou pelo debugger da IDE).
+
+**Pré-requisitos**
+
+| Ferramenta | Versão | Instalação |
+|---|---|---|
+| Go | 1.26+ | https://go.dev/dl · `winget install GoLang.Go` · `brew install go` |
+| ffmpeg | qualquer recente | `winget install Gyan.FFmpeg` · `brew install ffmpeg` · `sudo apt install ffmpeg` |
+| Docker | Compose v2 | ver opção A |
+
+Confira com `go version` e `ffmpeg -version`. O ffmpeg só é necessário para o processor-worker.
+
+**Passo 1. Subir só a infraestrutura**
+
+```bash
+docker compose up -d --wait postgres redis rabbitmq s3 mailpit
+```
+
+O PostgreSQL já sobe com os bancos `fiapx_auth` e `fiapx_videos` criados por [scripts/db/init.sql](scripts/db/init.sql).
+
+**Passo 2. Baixar as dependências Go**
+
+```bash
+go mod download
+```
+
+**Passo 3. Definir o segredo do JWT** (o mesmo para auth-service e video-service; mínimo de 32 caracteres)
+
+- bash/zsh: `export JWT_SECRET=dev-secret-com-pelo-menos-32-caracteres`
+- PowerShell: `$env:JWT_SECRET="dev-secret-com-pelo-menos-32-caracteres"`
+
+Todas as outras variáveis já têm padrão apontando para `localhost` (ver [seção 18](#18-configuração-variáveis-de-ambiente)). Se o Postgres estiver em outra porta (ex.: 55432), defina também `DATABASE_URL` para cada serviço.
+
+**Passo 4. Subir os 4 microsserviços, cada um em um terminal**
+
+```bash
+# Terminal 1
+go run ./cmd/auth-service            # :8081
+# Terminal 2
+go run ./cmd/video-service           # :8082
+# Terminal 3
+go run ./cmd/processor-worker        # :8083
+# Terminal 4
+go run ./cmd/notification-service    # :8084
+```
+
+Lembre de definir `JWT_SECRET` em cada terminal (passo 3). Cada serviço mostra `servidor HTTP iniciado` quando está pronto.
+
+> Para rodar dois workers na mão (paralelismo entre réplicas), abra outro terminal com outra porta: `PORT=8085 go run ./cmd/processor-worker` (PowerShell: `$env:PORT=8085; go run ./cmd/processor-worker`).
+
+**Passo 5. Subir o gateway (UI) apontando para os serviços da sua máquina**
+
+O gateway serve a UI e encaminha `/auth` e `/api`. Rode a imagem dele apontando para o host:
+
+- **Windows / macOS (Docker Desktop):**
+  ```bash
+  docker build -f deploy/gateway/Dockerfile -t fiapx/gateway:local .
+  docker run --rm -p 8080:8080 \
+    -e AUTH_UPSTREAM=host.docker.internal:8081 \
+    -e VIDEO_UPSTREAM=host.docker.internal:8082 \
+    fiapx/gateway:local
+  ```
+- **Linux:**
+  ```bash
+  docker build -f deploy/gateway/Dockerfile -t fiapx/gateway:local .
+  docker run --rm --network host \
+    -e AUTH_UPSTREAM=127.0.0.1:8081 -e VIDEO_UPSTREAM=127.0.0.1:8082 \
+    fiapx/gateway:local
+  ```
+
+Abra http://localhost:8080. Sem o gateway, a API continua acessível direto em `http://localhost:8081/auth/...` e `http://localhost:8082/api/...` (ver os exemplos `curl` na [seção 8](#8-referência-da-api)).
+
+**Passo 6 (opcional). Rodar o teste ponta a ponta contra os serviços locais**
+
+O `e2e.sh` gera o vídeo de teste com o ffmpeg do container do worker. Na opção B, use a opção A para rodá-lo, ou faça o fluxo pela UI.
+
+**Para parar:** `Ctrl+C` em cada terminal e `docker compose down` para a infraestrutura.
+
+---
+
+### 6.3 Opção C — Tudo na mão, sem Docker
+
+Cada componente é instalado e executado diretamente no sistema operacional.
+
+**Passo 1. Instalar as dependências**
+
+| Componente | Linux (Debian/Ubuntu) | macOS (Homebrew) | Windows |
+|---|---|---|---|
+| Go 1.26+ | https://go.dev/dl | `brew install go` | `winget install GoLang.Go` |
+| ffmpeg | `sudo apt install ffmpeg` | `brew install ffmpeg` | `winget install Gyan.FFmpeg` |
+| PostgreSQL 17 | `sudo apt install postgresql` | `brew install postgresql@17` | `winget install PostgreSQL.PostgreSQL.17` |
+| Redis 7 | `sudo apt install redis-server` | `brew install redis` | via WSL (`sudo apt install redis-server`) ou Memurai |
+| RabbitMQ 4 | [guia oficial](https://www.rabbitmq.com/docs/install-debian) | `brew install rabbitmq` | `choco install rabbitmq` (instala o Erlang junto) |
+| SeaweedFS (S3) | binário `weed` em https://github.com/seaweedfs/seaweedfs/releases | `brew install seaweedfs` | binário `weed.exe` nas releases |
+| Mailpit (SMTP de teste) | binário em https://github.com/axllent/mailpit/releases | `brew install mailpit` | binário `mailpit.exe` nas releases |
+| nginx (opcional, para a UI) | `sudo apt install nginx` | `brew install nginx` | https://nginx.org/en/download.html |
+
+**Passo 2. Criar o usuário e os bancos no PostgreSQL**
+
+```bash
+# como superusuário do Postgres (Linux: sudo -u postgres psql ...)
+psql -U postgres -c "CREATE USER fiapx WITH PASSWORD 'fiapx' CREATEDB;"
+# executa o script de criação (cria fiapx_auth e fiapx_videos com as tabelas)
+psql -U fiapx -h localhost -d postgres -f scripts/db/init.sql
+```
+
+> Os serviços também criam as tabelas sozinhos ao subir (migrações idempotentes), mas os **bancos** precisam existir.
+
+**Passo 3. Iniciar a infraestrutura** (cada um em um terminal, ou como serviço do SO)
+
+```bash
+# Redis (se não estiver rodando como serviço)
+redis-server
+
+# RabbitMQ (se não estiver rodando como serviço). O usuário guest/guest funciona via localhost.
+rabbitmq-server
+
+# SeaweedFS com API S3 na porta 8333, usando as credenciais do projeto
+mkdir -p ./data/seaweedfs
+weed server -dir=./data/seaweedfs -s3 -s3.port=8333 -s3.config=deploy/seaweedfs/s3.json
+
+# Mailpit (SMTP em :1025, painel em http://localhost:8025)
+mailpit
+```
+
+Confira: Redis com `redis-cli ping` (deve responder `PONG`); RabbitMQ em http://localhost:15672 (o painel requer `rabbitmq-plugins enable rabbitmq_management`); SeaweedFS com `curl http://localhost:8333/healthz`; Mailpit em http://localhost:8025.
+
+**Passo 4. Subir os microsserviços**
+
+Exatamente como nos **passos 2 a 4 da [opção B](#62-opção-b--serviços-go-na-mão--infraestrutura-no-docker)**: `go mod download`, definir `JWT_SECRET` e `go run ./cmd/<serviço>` em quatro terminais. Os valores padrão das variáveis já apontam para `localhost` e as portas acima.
+
+Exemplo completo em bash, com todas as variáveis explícitas:
+
+```bash
+export JWT_SECRET=dev-secret-com-pelo-menos-32-caracteres
+export RABBITMQ_URL=amqp://guest:guest@localhost:5672/
+export S3_ENDPOINT=localhost:8333 S3_ACCESS_KEY=fiapx-access-key S3_SECRET_KEY=fiapx-secret-key
+
+DATABASE_URL="postgres://fiapx:fiapx@localhost:5432/fiapx_auth?sslmode=disable"   go run ./cmd/auth-service &
+DATABASE_URL="postgres://fiapx:fiapx@localhost:5432/fiapx_videos?sslmode=disable" REDIS_ADDR=localhost:6379 go run ./cmd/video-service &
+go run ./cmd/processor-worker &
+SMTP_ADDR=localhost:1025 go run ./cmd/notification-service &
+```
+
+Equivalente em PowerShell (um serviço por janela):
+
+```powershell
+$env:JWT_SECRET="dev-secret-com-pelo-menos-32-caracteres"
+$env:DATABASE_URL="postgres://fiapx:fiapx@localhost:5432/fiapx_videos?sslmode=disable"
+go run ./cmd/video-service
+```
+
+**Passo 5. Servir a UI (opcional)**
+
+Sem Docker, use um nginx local com a mesma configuração do gateway:
+
+1. Copie [deploy/gateway/default.conf.template](deploy/gateway/default.conf.template) para a pasta de configuração do nginx (ex.: `/etc/nginx/conf.d/fiapx.conf`).
+2. Substitua `${NGINX_LOCAL_RESOLVERS}` por `127.0.0.1`, `${AUTH_UPSTREAM}` por `127.0.0.1:8081` e `${VIDEO_UPSTREAM}` por `127.0.0.1:8082`.
+3. Ajuste `root` para o caminho absoluto da pasta `web/` do repositório.
+4. Rode `nginx -s reload` e acesse http://localhost:8080.
+
+Sem nginx, use a API diretamente nas portas 8081/8082 (exemplos `curl` na [seção 8](#8-referência-da-api)).
+
+**Passo 6. Monitoramento (opcional)**
+
+Instale Prometheus e Grafana e use [deploy/prometheus/prometheus.yml](deploy/prometheus/prometheus.yml), trocando os alvos (`auth-service:8081` etc.) por `localhost:<porta>`. Importe o dashboard [deploy/grafana/dashboards/fiapx.json](deploy/grafana/dashboards/fiapx.json) no Grafana.
+
+---
+
+### 6.4 Opção D — Kubernetes (minikube)
+
+O passo a passo completo, com imagens publicadas no GHCR ou construídas localmente, está na [seção 17](#17-kubernetes). Resumo:
+
+```bash
+minikube start --cpus=4 --memory=8g
+minikube addons enable metrics-server
+kubectl apply -k deploy/k8s/local
+kubectl -n fiapx get pods -w
+minikube service -n fiapx gateway
+```
 
 ---
 
@@ -378,7 +610,7 @@ Você pode inspecionar as filas, as mensagens e a DLQ no **RabbitMQ Management**
 | `fiapx_videos` | video-service | `videos` (status, chaves no S3, tamanho, frames, erro, datas); `outbox` (mensagens a publicar) |
 
 - **Script de criação:** [scripts/db/init.sql](scripts/db/init.sql). O container do Postgres o executa automaticamente na primeira subida.
-- **Migrações automáticas:** cada serviço também aplica o seu DDL idempotente (`internal/*/migrations.sql`) ao iniciar, com `pg_advisory_lock` para várias réplicas. Isso permite usar um banco gerenciado (RDS) sem rodar o script manualmente.
+- **Migrações automáticas:** cada serviço também aplica o seu DDL idempotente (`internal/*/migrations.sql`) ao iniciar, com `pg_advisory_lock` para várias réplicas. Isso permite usar um PostgreSQL gerenciado (de qualquer provedor) sem rodar o script manualmente.
 
 Para consultar:
 ```bash
@@ -416,7 +648,7 @@ Detalhes em [ADR 0008](docs/adr/0008-retentativas-dlq-e-idempotencia.md).
 | video-service | Stateless; várias réplicas (HPA 2–6). O outbox relay usa `SKIP LOCKED` e roda em todas sem duplicar |
 | auth-service | Stateless; JWT validado localmente (HPA 2–5) |
 | gateway | Stateless; 2 réplicas no K8s |
-| Postgres/Redis/RabbitMQ/S3 | Em produção, serviços gerenciados (RDS, ElastiCache, Amazon MQ, S3) |
+| Postgres/Redis/RabbitMQ/S3 | Self-hosted no próprio cluster (padrão) ou serviços gerenciados de qualquer provedor, trocando só a configuração |
 
 **Demonstração de paralelismo:** envie vários vídeos pela UI e rode `docker compose logs -f processor-worker`. Cada réplica (`processor-worker-1`, `-2`) processa vídeos diferentes ao mesmo tempo. O painel *Vídeos em processamento agora* do Grafana mostra o total.
 
@@ -545,7 +777,7 @@ kubectl -n fiapx get pods -w
 minikube service -n fiapx gateway             # abre a aplicação
 ```
 
-**Em nuvem (AWS):** aplique `deploy/k8s/base` no EKS e aponte os Secrets para RDS PostgreSQL, ElastiCache, Amazon MQ (RabbitMQ), S3 e SES.
+**Sem dependência de nuvem:** `deploy/k8s/local` roda tudo self-hosted em qualquer Kubernetes (on-premises, k3s ou o Kubernetes gerenciado de qualquer provedor). Para usar serviços gerenciados, aplique só `deploy/k8s/base` e aponte o ConfigMap/Secret para eles (ver [docs/architecture.md § 10](docs/architecture.md#10-produção-agnóstico-de-nuvem)).
 
 ---
 
@@ -603,6 +835,20 @@ minikube service -n fiapx gateway             # abre a aplicação
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | Autenticação (opcional) | vazio |
 | `CONSUMER_CONCURRENCY` | Consumidores | `2` |
 
+### Armazenamento de arquivos: sem dependência de nuvem
+
+"S3" aqui é o **protocolo** de object storage, não a AWS. O código usa um cliente S3 genérico; o padrão é o **SeaweedFS** (open source, self-hosted), que sobe junto no Compose e no Kubernetes local. Qualquer outra implementação compatível funciona **sem alterar código**, só com variáveis:
+
+| Opção | Tipo | Exemplo de configuração |
+|---|---|---|
+| **SeaweedFS** (padrão) | Self-hosted | `S3_ENDPOINT=s3:8333`, `S3_USE_SSL=false` |
+| Garage / Ceph RGW / MinIO | Self-hosted | `S3_ENDPOINT=<host>:<porta>` |
+| Cloudflare R2 | Gerenciado | `S3_ENDPOINT=<account-id>.r2.cloudflarestorage.com`, `S3_REGION=auto`, `S3_USE_SSL=true` |
+| Backblaze B2 | Gerenciado | `S3_ENDPOINT=s3.<região>.backblazeb2.com`, `S3_USE_SSL=true` |
+| DigitalOcean Spaces / Wasabi / AWS S3 | Gerenciado | endpoint do provedor, `S3_USE_SSL=true` |
+
+Por que existe um storage compartilhado: o vídeo chega no video-service, mas é processado pelo worker em outro container ou máquina, e o ZIP gerado pelo worker é baixado pelo video-service. Disco local não funciona com várias réplicas ([ADR 0004](docs/adr/0004-object-storage-s3.md)).
+
 > No compose, `JWT_SECRET` pode ser sobrescrito com `JWT_SECRET=... docker compose up -d`. **Troque o padrão em qualquer ambiente real.**
 
 ---
@@ -650,20 +896,21 @@ Cada contexto segue **arquitetura hexagonal**: `service.go` (casos de uso) depen
 
 ---
 
-## 20. Desenvolvimento local sem Docker
+## 20. Fluxo de desenvolvimento
 
-Requer Go 1.26+ e ffmpeg no `PATH` (só para o worker). A infraestrutura pode vir do compose:
+Para rodar os serviços na sua máquina, veja a [opção B da seção 6](#62-opção-b--serviços-go-na-mão--infraestrutura-no-docker). Comandos usados antes de abrir um PR (os mesmos do CI):
 
 ```bash
-docker compose up -d postgres redis rabbitmq s3 mailpit
-export JWT_SECRET=dev-secret-com-pelo-menos-32-caracteres
-go run ./cmd/auth-service &
-go run ./cmd/video-service &
-go run ./cmd/processor-worker &
-go run ./cmd/notification-service &
+gofmt -l .                                   # lista arquivos não formatados (gofmt -w . corrige)
+go vet ./...                                 # análise estática
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0 run ./...
+go test ./...                                # testes unitários
+docker compose up -d --wait postgres redis rabbitmq s3
+go test -tags=integration ./...              # unitários + integração
+go build ./...                               # compila os 4 serviços
 ```
 
-Os padrões das variáveis já apontam para `localhost`. Sem o gateway, chame os serviços direto: `localhost:8081/auth/...` e `localhost:8082/api/...`.
+Para compilar binários: `go build -o bin/ ./cmd/...` (gera `bin/auth-service`, `bin/video-service` etc.).
 
 ---
 

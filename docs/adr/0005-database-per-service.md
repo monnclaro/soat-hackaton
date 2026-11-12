@@ -24,6 +24,6 @@ O sistema precisa persistir usuários e vídeos. Microsserviços que compartilha
 
 ## Consequências
 
-- Em ambiente local os dois bancos ficam na mesma instância Postgres (baixo custo); em produção podem ser instâncias RDS separadas.
+- Em ambiente local os dois bancos ficam na mesma instância Postgres (baixo custo); em produção podem ser instâncias separadas.
 - A troca de e-mail de um usuário não é refletida em vídeos antigos (aceitável: o e-mail é usado apenas para notificar o próprio upload).
 - O schema existe em dois arquivos; o CI verifica que a cópia do K8s (`deploy/k8s/local/init.sql`) é idêntica ao script.

@@ -8,7 +8,7 @@
 -- Executado automaticamente pelo container do Postgres no docker-compose
 -- (/docker-entrypoint-initdb.d). Os serviços também aplicam o mesmo DDL de forma
 -- idempotente ao subir (internal/*/migrations.sql), o que permite usar um banco
--- gerenciado (ex.: RDS) sem rodar este script manualmente.
+-- gerenciado (de qualquer provedor) sem rodar este script manualmente.
 -- =============================================================================
 
 CREATE DATABASE fiapx_auth;

@@ -1,4 +1,4 @@
-// Package storage implementa armazenamento de objetos S3-compatível (MinIO/SeaweedFS local / AWS S3 em produção).
+// Package storage implementa armazenamento de objetos S3-compatível (SeaweedFS, Garage, Ceph, MinIO, Cloudflare R2, AWS S3...).
 package storage
 
 import (

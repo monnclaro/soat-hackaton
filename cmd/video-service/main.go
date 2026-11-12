@@ -88,8 +88,10 @@ func run(log *slog.Logger) error {
 
 	mux := http.NewServeMux()
 	video.NewHandler(svc, tokens, log, config.Int64("MAX_UPLOAD_BYTES", 1<<30)).Register(mux)
+	// Readiness só depende do que é essencial (Postgres e storage). O Redis é apenas cache:
+	// se cair, a listagem lê direto do Postgres, então não deve tirar o pod do balanceamento.
 	httpx.RegisterOps(mux, func(ctx context.Context) error {
-		return errors.Join(repo.Ping(ctx), rdb.Ping(ctx).Err(), st.Ping(ctx))
+		return errors.Join(repo.Ping(ctx), st.Ping(ctx))
 	})
 
 	// Erros fatais de qualquer componente encerram o processo (o orquestrador reinicia).
