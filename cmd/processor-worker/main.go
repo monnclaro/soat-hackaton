@@ -1,5 +1,6 @@
 // processor-worker: consome a fila de vídeos e processa vários em paralelo (WORKER_CONCURRENCY por réplica).
 // Escala horizontalmente: cada réplica é mais um consumidor competindo pela mesma fila.
+// Este arquivo é a raiz de composição: cria os adaptadores e os injeta no caso de uso ProcessVideo.
 package main
 
 import (
@@ -19,7 +20,10 @@ import (
 	"github.com/monnclaro/soat-hackaton/internal/platform/logging"
 	"github.com/monnclaro/soat-hackaton/internal/platform/rabbitmq"
 	"github.com/monnclaro/soat-hackaton/internal/platform/storage"
-	"github.com/monnclaro/soat-hackaton/internal/processor"
+	"github.com/monnclaro/soat-hackaton/internal/processor/adapter/archive"
+	"github.com/monnclaro/soat-hackaton/internal/processor/adapter/ffmpeg"
+	"github.com/monnclaro/soat-hackaton/internal/processor/adapter/messaging"
+	"github.com/monnclaro/soat-hackaton/internal/processor/usecase"
 )
 
 func main() {
@@ -65,11 +69,19 @@ func run(log *slog.Logger) error {
 	defer func() { _ = pub.Close() }()
 
 	fps, _ := strconv.ParseFloat(config.String("FRAME_FPS", "1"), 64)
-	proc := processor.New(st, processor.FFmpeg{Binary: config.String("FFMPEG_BIN", "ffmpeg"), FPS: fps}, pub, processor.Config{
-		WorkDir:     config.String("WORK_DIR", os.TempDir()+"/fiapx"),
-		JobTimeout:  config.Duration("JOB_TIMEOUT", 30*time.Minute),
-		MaxAttempts: config.Int("MAX_ATTEMPTS", 3),
-	}, log)
+	// Adaptadores → caso de uso.
+	processVideo := usecase.NewProcessVideo(
+		st,
+		ffmpeg.Extractor{Binary: config.String("FFMPEG_BIN", "ffmpeg"), FPS: fps},
+		archive.Zip{},
+		messaging.NewStatusPublisher(pub),
+		usecase.Config{
+			WorkDir:     config.String("WORK_DIR", os.TempDir()+"/fiapx"),
+			JobTimeout:  config.Duration("JOB_TIMEOUT", 30*time.Minute),
+			MaxAttempts: config.Int("MAX_ATTEMPTS", 3),
+		},
+		log,
+	)
 
 	mux := http.NewServeMux()
 	httpx.RegisterOps(mux, func(ctx context.Context) error {
@@ -85,7 +97,7 @@ func run(log *slog.Logger) error {
 	go func() {
 		defer wg.Done()
 		concurrency := config.Int("WORKER_CONCURRENCY", 2)
-		if err := rabbitmq.Consume(ctx, conn, rabbitmq.QueueVideoUploaded, concurrency, log, processor.Handler(proc)); err != nil {
+		if err := rabbitmq.Consume(ctx, conn, rabbitmq.QueueVideoUploaded, concurrency, log, messaging.VideoUploadedHandler(processVideo)); err != nil {
 			cancelAll(err)
 		}
 	}()

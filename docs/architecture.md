@@ -69,24 +69,28 @@ sequenceDiagram
     participant Q as RabbitMQ
     participant W as processor-worker
 
-    U->>V: POST /api/videos (multipart, JWT)
-    V->>S: PutObject (streaming)
-    V->>DB: BEGIN; INSERT videos(PENDING); INSERT outbox; COMMIT
-    V-->>U: 202 Accepted {id, status: PENDING}
-    loop a cada 1s (ou imediatamente se o lote veio cheio)
-        R->>DB: SELECT ... FOR UPDATE SKIP LOCKED
-        R->>Q: publish video.uploaded (confirm)
-        R->>DB: UPDATE outbox SET published_at
+    U->>V: POST /api/videos (multipart + JWT)
+    V->>S: grava o vídeo (streaming)
+    V->>DB: transação: INSERT videos (PENDING) + INSERT outbox
+    V-->>U: 202 Accepted (id, status PENDING)
+    loop a cada 1s, ou na hora se o lote veio cheio
+        R->>DB: lê mensagens pendentes (FOR UPDATE SKIP LOCKED)
+        R->>Q: publica video.uploaded (com confirmação)
+        R->>DB: marca a mensagem como publicada
     end
-    Q->>W: deliver (prefetch N)
+    Q->>W: entrega a mensagem (prefetch N)
     W->>Q: video.status.processing
-    W->>S: GetObject → ffmpeg → zip → PutObject
-    W->>Q: video.status.completed {zip_key, frame_count}
+    W->>S: baixa o vídeo
+    Note over W: ffmpeg extrai os frames e gera o ZIP
+    W->>S: grava o ZIP
+    W->>Q: video.status.completed (zip_key, frame_count)
     W-->>Q: ack
-    Q->>V: video.status.* → UPDATE videos + invalida cache
+    Q->>V: video.status.*
+    Note over V: atualiza o vídeo no banco e invalida o cache
     U->>V: GET /api/videos (polling da UI)
     U->>V: GET /api/videos/{id}/download
-    V->>S: GetObject (stream do ZIP)
+    V->>S: lê o ZIP (streaming)
+    V-->>U: frames.zip
 ```
 
 ### 4.2 Falha e notificação
@@ -176,17 +180,51 @@ erDiagram
 
 `users` fica no banco `fiapx_auth`; `videos` e `outbox` ficam em `fiapx_videos` (database-per-service, sem FK entre bancos). O script de criação está em [scripts/db/init.sql](../scripts/db/init.sql).
 
-## 7. Organização do código (Clean / Hexagonal)
+## 7. Organização do código (Clean Architecture)
+
+Cada microsserviço segue as camadas da Clean Architecture ([ADR 0013](adr/0013-clean-architecture.md)). As dependências apontam sempre para dentro, e o teste [internal/archtest](../internal/archtest/arch_test.go) falha o CI se a regra for violada.
+
+```mermaid
+flowchart LR
+    subgraph Adapters["adapter/ (Interface Adapters + Frameworks & Drivers)"]
+        HTTP[httpapi<br/>controllers + DTOs]
+        MSG[messaging<br/>consumidores / publishers]
+        DB[postgres / redis<br/>repositórios e cache]
+        EXT[bcrypt / jwt / ffmpeg / archive / smtp]
+    end
+    subgraph UC["usecase/ (Use Cases)"]
+        UCS[casos de uso]
+        PORTS[ports.go<br/>interfaces]
+    end
+    subgraph DOM["domain/ (Entities)"]
+        ENT[entidades e regras]
+    end
+    HTTP --> UCS
+    MSG --> UCS
+    UCS --> ENT
+    UCS --> PORTS
+    DB -. implementa .-> PORTS
+    EXT -. implementa .-> PORTS
+    MSG -. implementa .-> PORTS
+```
 
 ```
-cmd/<serviço>/main.go          composição (wiring) e ciclo de vida
-internal/<contexto>/
-  domain.go / service.go       regras e casos de uso (dependem só de interfaces/portas)
-  handler.go / async.go        adaptadores de entrada (HTTP, consumidores)
-  postgres.go / cache.go       adaptadores de saída
-internal/events                contratos de mensagens
-internal/platform              infraestrutura compartilhada (httpx, rabbitmq, postgres, storage, security, config)
+cmd/<serviço>/main.go            raiz de composição: cria os adaptadores e injeta nos casos de uso
+internal/<serviço>/
+  domain/                        entidades e regras de negócio puras (sem dependências)
+  usecase/                       casos de uso + ports.go (interfaces que eles exigem)
+  adapter/                       implementações: httpapi, messaging, postgres, redis, bcrypt, jwt, ffmpeg, archive, smtp
+internal/events                  contrato das mensagens entre serviços
+internal/platform                drivers compartilhados (S3, RabbitMQ, Postgres, HTTP, JWT, config, logs)
+internal/archtest                teste automático da regra de dependência
 ```
+
+| Serviço | domain | usecase (portas) | adapter |
+|---|---|---|---|
+| auth | `User`, `NewRegistration` (validação), erros | `Auth`: Register, Login, Profile (`UserRepository`, `PasswordHasher`, `TokenIssuer`) | httpapi, postgres, bcrypt, jwt |
+| video | `Video`, máquina de estados (`Apply`), validação de arquivo | `Videos`: Upload, List, Get, Download, ApplyStatus (`Repository`, `ListCache`, `FileStorage`) | httpapi, postgres (+ outbox), redis, messaging (consumidor de status + outbox relay) |
+| processor | `Job`, `RetryPolicy`, `ProcessingError` | `ProcessVideo` (`FileStorage`, `FrameExtractor`, `Archiver`, `StatusPublisher`) | ffmpeg, archive (ZIP), messaging (consumidor + publisher) |
+| notification | `Failure`, `FailureMessage` | `NotifyFailure` (`Sender`) | smtp, messaging (consumidor) |
 
 ## 8. Observabilidade
 

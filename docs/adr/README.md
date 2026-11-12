@@ -14,3 +14,4 @@
 | [0010](./0010-notificacao-por-eventos.md) | Notificação de falha orientada a eventos (e-mail) | Aceito |
 | [0011](./0011-observabilidade-prometheus-grafana.md) | Observabilidade com Prometheus + Grafana | Aceito |
 | [0012](./0012-seaweedfs-no-ambiente-local.md) | SeaweedFS como S3 no ambiente local | Aceito |
+| [0013](./0013-clean-architecture.md) | Clean Architecture em cada microsserviço (domain / usecase / adapter) | Aceito |
