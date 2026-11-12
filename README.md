@@ -41,7 +41,6 @@ Outras formas de executar (serviços na mão, sem Docker, Kubernetes) estão em 
 | [ADRs](docs/adr/README.md) | 12 decisões de arquitetura com contexto e alternativas |
 | [OpenAPI](docs/openapi.yaml) | Contrato da API |
 | [Script do banco](scripts/db/init.sql) | Criação dos bancos de dados |
-| [Roteiro da apresentação](docs/presentation.md) | Sugestão para o vídeo de 10 minutos |
 
 ## O problema e a solução
 
