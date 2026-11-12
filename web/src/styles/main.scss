@@ -1,0 +1,11 @@
+// Ponto de entrada dos estilos (compilado para dist/assets/app.css pelo build.mjs).
+@use "tokens";
+@use "base";
+@use "layout";
+@use "components/buttons";
+@use "components/forms";
+@use "components/card";
+@use "components/stats";
+@use "components/dropzone";
+@use "components/videos";
+@use "components/toasts";

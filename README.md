@@ -125,7 +125,7 @@ Para os diagramas de sequência (upload, processamento, falha), a máquina de es
 ## 4. Microsserviços
 
 ### gateway (nginx)
-- Ponto único de entrada na porta **8080**; serve a **UI web** (`web/index.html`).
+- Ponto único de entrada na porta **8080**; serve a **UI web** (`web/`: HTML + SCSS + módulos ES, compilada no build da imagem).
 - Roteia `/auth/*` → auth-service e `/api/*` → video-service.
 - Upload em **streaming** (`proxy_request_buffering off`), limite de 1 GiB.
 - Re-resolve o DNS dos serviços a cada 10s, então réplicas novas entram no balanceamento.
@@ -167,7 +167,8 @@ Para os diagramas de sequência (upload, processamento, falha), a máquina de es
 | Arquivos | **Object storage compatível com S3**: SeaweedFS self-hosted | Compartilhado entre API e workers, sem depender de nuvem ([ADR 0004](docs/adr/0004-object-storage-s3.md)) |
 | Processamento | **ffmpeg** | Mesmo motor do projeto base |
 | E-mail (local) | **Mailpit** | Captura os e-mails com UI web |
-| Gateway | **nginx 1.27** | Proxy reverso + arquivos estáticos |
+| Gateway | **nginx 1.30** | Proxy reverso + arquivos estáticos |
+| UI | **HTML + SCSS (Dart Sass) + JavaScript (módulos ES)** | Sem framework: leve e sem etapa de bundling; SCSS compilado no build da imagem |
 | Métricas | **Prometheus 3 + Grafana 12** | Recomendado; provisionado como código |
 | Containers | **Docker, Compose, Kubernetes (Kustomize)** | Local, CI e produção com os mesmos artefatos |
 | CI/CD | **GitHub Actions + GHCR** | Recomendado |
@@ -425,12 +426,19 @@ go run ./cmd/video-service
 
 **Passo 5. Servir a UI (opcional)**
 
-Sem Docker, use um nginx local com a mesma configuração do gateway:
+Sem Docker, compile a UI e sirva com um nginx local usando a mesma configuração do gateway:
 
-1. Copie [deploy/gateway/default.conf.template](deploy/gateway/default.conf.template) para a pasta de configuração do nginx (ex.: `/etc/nginx/conf.d/fiapx.conf`).
-2. Substitua `${NGINX_LOCAL_RESOLVERS}` por `127.0.0.1`, `${AUTH_UPSTREAM}` por `127.0.0.1:8081` e `${VIDEO_UPSTREAM}` por `127.0.0.1:8082`.
-3. Ajuste `root` para o caminho absoluto da pasta `web/` do repositório.
-4. Rode `nginx -s reload` e acesse http://localhost:8080.
+1. Compile a UI (requer **Node.js 20+**):
+   ```bash
+   cd web
+   npm ci
+   npm run build        # gera web/dist (SCSS compilado + HTML + JS)
+   cd ..
+   ```
+2. Copie [deploy/gateway/default.conf.template](deploy/gateway/default.conf.template) para a pasta de configuração do nginx (ex.: `/etc/nginx/conf.d/fiapx.conf`).
+3. Substitua `${NGINX_LOCAL_RESOLVERS}` por `127.0.0.1`, `${AUTH_UPSTREAM}` por `127.0.0.1:8081` e `${VIDEO_UPSTREAM}` por `127.0.0.1:8082`.
+4. Ajuste `root` para o caminho absoluto da pasta `web/dist` do repositório.
+5. Rode `nginx -s reload` e acesse http://localhost:8080.
 
 Sem nginx, use a API diretamente nas portas 8081/8082 (exemplos `curl` na [seção 8](#8-referência-da-api)).
 
@@ -457,15 +465,21 @@ minikube service -n fiapx gateway
 ## 7. Usando o sistema pela interface web
 
 1. Acesse **http://localhost:8080**.
-2. Em **Criar conta**, informe nome, e-mail e senha (mínimo de 8 caracteres) e clique em **Cadastrar**.
-3. Em **Entrar**, faça login.
-4. Em **Enviar vídeos**, selecione **um ou vários** arquivos (mp4, avi, mov, mkv, webm, wmv, flv, m4v) e clique em **Enviar**. Os uploads seguem em paralelo.
-5. A tabela **Meus vídeos** se atualiza sozinha a cada 4s:
+2. Na aba **Criar conta**, informe nome, e-mail e senha (mínimo de 8 caracteres). Ao cadastrar, você já entra logado.
+   Nas próximas vezes, use a aba **Entrar**. A sessão (token JWT) fica salva no navegador por 24h; quando expira, a tela volta para o login com um aviso.
+3. Em **Enviar vídeos**, **arraste** um ou vários arquivos (mp4, avi, mov, mkv, webm, wmv, flv, m4v) para a área tracejada ou clique nela para selecionar.
+   - Cada arquivo ganha uma **barra de progresso** própria e os envios seguem em paralelo.
+   - Arquivos com formato inválido ou acima de 1 GB são recusados antes do envio.
+4. Os **contadores** no topo mostram o total de vídeos, quantos estão na fila ou processando, concluídos e com falha.
+5. A lista **Meus vídeos** se atualiza sozinha: a cada 3s enquanto houver vídeo em andamento (indicador "atualizando") e a cada 20s quando não houver. Ela pausa quando a aba fica em segundo plano.
    - **Na fila** (`PENDING`): aceito, aguardando um worker;
    - **Processando** (`PROCESSING`);
-   - **Concluído** (`COMPLETED`): aparece o botão **Baixar ZIP**;
+   - **Concluído** (`COMPLETED`): mostra a quantidade de frames e o botão **Baixar ZIP**;
    - **Falhou** (`FAILED`): mostra o motivo, e um e-mail é enviado.
-6. Para ver o e-mail de falha, envie um arquivo inválido renomeado para `.mp4` e abra o **Mailpit** em http://localhost:8025.
+6. Quando um vídeo termina ou falha, aparece um aviso no canto da tela.
+7. Para ver o e-mail de falha, envie um arquivo inválido renomeado para `.mp4` e abra o **Mailpit** em http://localhost:8025.
+
+A interface segue o tema claro/escuro do sistema operacional e funciona em telas de celular.
 
 ---
 
@@ -873,7 +887,11 @@ Por que existe um storage compartilhado: o vídeo chega no video-service, mas é
 │       ├── config/  httpx/  logging/
 │       ├── postgres/  rabbitmq/  storage/
 │       └── security/                 # JWT e contexto do usuário
-├── web/index.html                    # UI (servida pelo gateway)
+├── web/                              # UI servida pelo gateway
+│   ├── src/index.html                # marcação
+│   ├── src/styles/                   # SCSS: tokens (tema claro/escuro), mixins, base, layout, components/
+│   ├── src/js/                       # módulos ES: api, session, auth, upload, videos, toast, dom
+│   └── build.mjs                     # compila SCSS e gera web/dist (npm run build / npm run watch)
 ├── deploy/
 │   ├── gateway/                      # Dockerfile + template nginx
 │   ├── prometheus/                   # scrape + alertas
@@ -911,6 +929,16 @@ go build ./...                               # compila os 4 serviços
 ```
 
 Para compilar binários: `go build -o bin/ ./cmd/...` (gera `bin/auth-service`, `bin/video-service` etc.).
+
+**UI (`web/`)**: com os serviços rodando (opção A ou B), edite `web/src` e recompile automaticamente:
+
+```bash
+cd web
+npm ci
+npm run watch        # recompila SCSS/HTML/JS para web/dist a cada alteração
+```
+
+No Compose, para ver as alterações, reconstrua o gateway: `docker compose up -d --build gateway`.
 
 ---
 

@@ -1,0 +1,35 @@
+@use "sass:map";
+
+$breakpoints: (
+  sm: 560px,
+  md: 860px,
+);
+
+@mixin up($bp) {
+  @media (min-width: map.get($breakpoints, $bp)) {
+    @content;
+  }
+}
+
+@mixin down($bp) {
+  @media (max-width: map.get($breakpoints, $bp) - 1px) {
+    @content;
+  }
+}
+
+@mixin focus-ring {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+// Variante "soft" de uma cor (fundo claro + texto forte), usada em badges e destaques.
+@mixin tone($name) {
+  background: var(--#{$name}-soft);
+  color: var(--#{$name});
+}
+
+@mixin truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

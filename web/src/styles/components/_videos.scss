@@ -1,0 +1,132 @@
+@use "../tokens" as *;
+@use "../mixins" as *;
+
+// Status do vídeo → tom de cor (o mesmo mapa gera badge e borda lateral).
+$status-tones: (
+  PENDING: warn,
+  PROCESSING: info,
+  COMPLETED: ok,
+  FAILED: err,
+);
+
+.videos {
+  display: grid;
+  gap: $space;
+}
+
+.video {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: $space $space * 2;
+  align-items: center;
+  padding: $space * 1.75 $space * 2;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: $radius-sm;
+
+  @include up(sm) {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  @each $status, $tone in $status-tones {
+    &[data-status="#{$status}"] {
+      border-left-color: var(--#{$tone});
+    }
+  }
+
+  &__main {
+    min-width: 0;
+  }
+
+  &__name {
+    @include truncate;
+    font-weight: 600;
+  }
+
+  &__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $space * 0.5 $space * 1.5;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  &__error {
+    grid-column: 1 / -1;
+    padding: $space $space * 1.25;
+    font-size: 13px;
+    border-radius: 6px;
+    @include tone(err);
+  }
+
+  &__action {
+    grid-column: 1 / -1;
+
+    @include up(sm) {
+      grid-column: auto;
+    }
+  }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px $space * 1.25;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: 999px;
+
+  @each $status, $tone in $status-tones {
+    &--#{$status} {
+      @include tone($tone);
+    }
+  }
+
+  &--PROCESSING::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border: 2px solid currentcolor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+}
+
+.empty {
+  padding: $space * 4 $space * 2;
+  text-align: center;
+  color: var(--muted);
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    background: var(--ok);
+    border-radius: 50%;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}

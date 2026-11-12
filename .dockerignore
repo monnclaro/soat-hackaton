@@ -7,3 +7,5 @@ deploy/prometheus
 scripts
 *.md
 coverage.out
+web/node_modules
+web/dist

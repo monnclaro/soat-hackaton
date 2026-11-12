@@ -1,0 +1,41 @@
+@use "../tokens" as *;
+@use "../mixins" as *;
+
+.toasts {
+  position: fixed;
+  right: $space * 2;
+  bottom: $space * 2;
+  z-index: 50;
+  display: grid;
+  gap: $space;
+  width: min(360px, calc(100vw - #{$space * 4}));
+}
+
+.toast {
+  padding: $space * 1.5 $space * 2;
+  font-size: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: $radius-sm;
+  box-shadow: var(--shadow);
+  animation: toast-in 180ms ease-out;
+
+  @each $tone in (ok, info, err) {
+    &--#{$tone} {
+      border-left-color: var(--#{$tone});
+    }
+  }
+
+  &.is-leaving {
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
