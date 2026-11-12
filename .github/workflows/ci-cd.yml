@@ -40,10 +40,13 @@ jobs:
       - name: go vet
         run: go vet ./... && go vet -tags=integration ./...
 
+      # goinstall: compila o lint com o Go do setup-go (1.26). O binário pré-compilado da
+      # v2.5 foi gerado com Go 1.25 e recusa módulos que exigem Go 1.26.
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.5
+          version: v2.5.0
+          install-mode: goinstall
 
       - name: Script SQL do K8s sincronizado
         run: cmp scripts/db/init.sql deploy/k8s/local/init.sql

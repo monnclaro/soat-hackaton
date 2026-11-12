@@ -2,7 +2,7 @@
 
 Hackathon POSTECH SOAT, Fase 5. Evolução do projeto base (um monólito Go que processava o vídeo dentro da requisição HTTP) para uma arquitetura de **microsserviços em Go com mensageria**. Ela processa vários vídeos em paralelo, não perde requisições em picos, tem autenticação, status por usuário e notificação de falha.
 
-📐 **Arquitetura detalhada:** [docs/architecture.md](docs/architecture.md) · 📄 **Contrato da API:** [docs/openapi.yaml](docs/openapi.yaml) · 🗄️ **Script do banco:** [scripts/db/init.sql](scripts/db/init.sql)
+📐 **Arquitetura detalhada:** [docs/architecture.md](docs/architecture.md) · 🧭 **ADRs:** [docs/adr](docs/adr/README.md) · 📄 **Contrato da API:** [docs/openapi.yaml](docs/openapi.yaml) · 🗄️ **Script do banco:** [scripts/db/init.sql](scripts/db/init.sql)
 
 ```mermaid
 flowchart LR
@@ -101,7 +101,7 @@ internal/integration       testes de integração (build tag "integration")
 web/                       UI (servida pelo gateway)
 deploy/                    gateway, prometheus, grafana, seaweedfs, k8s
 scripts/                   init.sql do banco e e2e.sh
-docs/                      arquitetura e OpenAPI
+docs/                      arquitetura, ADRs e OpenAPI
 ```
 
 ## Configuração (variáveis de ambiente)

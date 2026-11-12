@@ -198,6 +198,8 @@ internal/platform              infraestrutura compartilhada (httpx, rabbitmq, po
 
 ## 9. Decisões (ADRs resumidas)
 
+Versão completa (contexto, alternativas descartadas e consequências) em [docs/adr](./adr/README.md).
+
 | # | Decisão | Motivo | Trade-off |
 |---|---|---|---|
 | 1 | Go + `net/http` da stdlib | Mesmo stack do projeto base; roteamento com padrões já existe no Go 1.22+ | Menos "açúcar" que gin |
