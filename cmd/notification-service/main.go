@@ -1,4 +1,5 @@
 // notification-service: envia e-mail ao usuário quando o processamento de um vídeo falha.
+// Este arquivo é a raiz de composição: cria os adaptadores e os injeta no caso de uso NotifyFailure.
 package main
 
 import (
@@ -12,7 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/monnclaro/soat-hackaton/internal/notification"
+	"github.com/monnclaro/soat-hackaton/internal/notification/adapter/messaging"
+	"github.com/monnclaro/soat-hackaton/internal/notification/adapter/smtp"
+	"github.com/monnclaro/soat-hackaton/internal/notification/usecase"
 	"github.com/monnclaro/soat-hackaton/internal/platform/config"
 	"github.com/monnclaro/soat-hackaton/internal/platform/httpx"
 	"github.com/monnclaro/soat-hackaton/internal/platform/logging"
@@ -42,13 +45,14 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	sender := notification.NewSMTPSender(
+	// Adaptador SMTP → caso de uso.
+	sender := smtp.New(
 		config.String("SMTP_ADDR", "localhost:1025"),
 		config.String("SMTP_FROM", "FIAP X <no-reply@fiapx.local>"),
 		config.String("SMTP_USERNAME", ""),
 		config.String("SMTP_PASSWORD", ""),
 	)
-	notifier := notification.NewNotifier(sender, log)
+	notifyFailure := usecase.NewNotifyFailure(sender, log)
 
 	mux := http.NewServeMux()
 	httpx.RegisterOps(mux, func(context.Context) error {
@@ -63,7 +67,7 @@ func run(log *slog.Logger) error {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		if err := rabbitmq.Consume(ctx, conn, rabbitmq.QueueNotifications, config.Int("CONSUMER_CONCURRENCY", 2), log, notification.Handler(notifier)); err != nil {
+		if err := rabbitmq.Consume(ctx, conn, rabbitmq.QueueNotifications, config.Int("CONSUMER_CONCURRENCY", 2), log, messaging.FailedVideoHandler(notifyFailure)); err != nil {
 			cancelAll(err)
 		}
 	}()

@@ -20,7 +20,7 @@ Manter **Go** (mesma linguagem do projeto base e adequada a serviços de I/O con
 
 Todos vivem num **monorepo** (`cmd/<serviço>` + `internal/<contexto>`), com um Dockerfile multi-stage parametrizado por `SERVICE`. Cada serviço gera sua própria imagem e tem Deployment/HPA independentes.
 
-Internamente cada contexto segue arquitetura hexagonal: casos de uso (`service.go`) dependem de portas (interfaces); adaptadores (`postgres.go`, `cache.go`, `handler.go`, `async.go`) ficam na borda; `cmd/*/main.go` faz a composição.
+Internamente cada serviço segue Clean Architecture, com as camadas `domain/`, `usecase/` e `adapter/`, e `cmd/*/main.go` como raiz de composição (detalhes em [ADR 0013](./0013-clean-architecture.md)).
 
 ## Alternativas descartadas
 

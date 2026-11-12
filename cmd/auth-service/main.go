@@ -1,4 +1,6 @@
 // auth-service: cadastro de usuários e emissão de JWT.
+// Este arquivo é a raiz de composição: cria os adaptadores (frameworks & drivers),
+// injeta-os nos casos de uso e expõe os casos de uso via HTTP.
 package main
 
 import (
@@ -9,7 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/monnclaro/soat-hackaton/internal/auth"
+	authbcrypt "github.com/monnclaro/soat-hackaton/internal/auth/adapter/bcrypt"
+	"github.com/monnclaro/soat-hackaton/internal/auth/adapter/httpapi"
+	"github.com/monnclaro/soat-hackaton/internal/auth/adapter/jwt"
+	authpg "github.com/monnclaro/soat-hackaton/internal/auth/adapter/postgres"
+	"github.com/monnclaro/soat-hackaton/internal/auth/usecase"
 	"github.com/monnclaro/soat-hackaton/internal/platform/config"
 	"github.com/monnclaro/soat-hackaton/internal/platform/httpx"
 	"github.com/monnclaro/soat-hackaton/internal/platform/logging"
@@ -36,14 +42,19 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
-	if err := postgres.Migrate(startCtx, pool, auth.Migration); err != nil {
+	if err := postgres.Migrate(startCtx, pool, authpg.Migration); err != nil {
 		logger.Error("falha na migração", "error", err)
 		os.Exit(1)
 	}
 
-	svc := auth.NewService(auth.NewPostgresRepository(pool), tokens, config.Int("BCRYPT_COST", 0))
+	// Adaptadores → casos de uso → controller HTTP.
+	auth := usecase.NewAuth(
+		authpg.NewUserRepository(pool),
+		authbcrypt.New(config.Int("BCRYPT_COST", 0)),
+		jwt.New(tokens),
+	)
 	mux := http.NewServeMux()
-	auth.NewHandler(svc, tokens, logger).Register(mux)
+	httpapi.NewHandler(auth, tokens, logger).Register(mux)
 	httpx.RegisterOps(mux, pool.Ping)
 
 	if err := httpx.Serve(ctx, logger, ":"+config.String("PORT", "8081"), httpx.Observe(logger, mux)); err != nil {

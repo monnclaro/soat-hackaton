@@ -22,12 +22,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/monnclaro/soat-hackaton/internal/auth"
+	authpg "github.com/monnclaro/soat-hackaton/internal/auth/adapter/postgres"
+	authdomain "github.com/monnclaro/soat-hackaton/internal/auth/domain"
 	"github.com/monnclaro/soat-hackaton/internal/events"
 	"github.com/monnclaro/soat-hackaton/internal/platform/postgres"
 	"github.com/monnclaro/soat-hackaton/internal/platform/rabbitmq"
 	"github.com/monnclaro/soat-hackaton/internal/platform/storage"
-	"github.com/monnclaro/soat-hackaton/internal/video"
+	videopg "github.com/monnclaro/soat-hackaton/internal/video/adapter/postgres"
+	videoredis "github.com/monnclaro/soat-hackaton/internal/video/adapter/redis"
+	videodomain "github.com/monnclaro/soat-hackaton/internal/video/domain"
+	"github.com/monnclaro/soat-hackaton/internal/video/usecase"
 )
 
 func env(k, def string) string {
@@ -64,16 +68,16 @@ func pool(t *testing.T, db string, migration string) *pgxpool.Pool {
 }
 
 func TestAuthPostgresRepository(t *testing.T) {
-	repo := auth.NewPostgresRepository(pool(t, "fiapx_auth", auth.Migration))
+	repo := authpg.NewUserRepository(pool(t, "fiapx_auth", authpg.Migration))
 	c := ctx(t)
 	email := fmt.Sprintf("it-%s@fiapx.local", uuid.NewString()[:8])
-	u := auth.User{ID: uuid.NewString(), Name: "IT", Email: email, PasswordHash: "hash", CreatedAt: time.Now().UTC()}
+	u := authdomain.User{ID: uuid.NewString(), Name: "IT", Email: email, PasswordHash: "hash", CreatedAt: time.Now().UTC()}
 	if err := repo.Create(c, u); err != nil {
 		t.Fatal(err)
 	}
 	dup := u
 	dup.ID = uuid.NewString()
-	if err := repo.Create(c, dup); !errors.Is(err, auth.ErrEmailTaken) {
+	if err := repo.Create(c, dup); !errors.Is(err, authdomain.ErrEmailTaken) {
 		t.Fatalf("duplicate e-mail: %v", err)
 	}
 	got, err := repo.FindByEmail(c, email)
@@ -83,39 +87,39 @@ func TestAuthPostgresRepository(t *testing.T) {
 	if _, err := repo.FindByID(c, u.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.FindByEmail(c, "none@x.com"); !errors.Is(err, auth.ErrNotFound) {
+	if _, err := repo.FindByEmail(c, "none@x.com"); !errors.Is(err, authdomain.ErrUserNotFound) {
 		t.Fatalf("not found: %v", err)
 	}
 }
 
 func TestVideoPostgresRepositoryAndOutbox(t *testing.T) {
-	p := pool(t, "fiapx_videos", video.Migration)
-	repo := video.NewPostgresRepository(p)
+	p := pool(t, "fiapx_videos", videopg.Migration)
+	repo := videopg.NewRepository(p)
 	c := ctx(t)
 	// Isola o teste: drena mensagens pendentes de execuções anteriores.
 	_, _ = p.Exec(c, `UPDATE outbox SET published_at = now() WHERE published_at IS NULL`)
 
 	userID := uuid.NewString()
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	v := video.Video{ID: uuid.NewString(), UserID: userID, UserEmail: "a@x.com", OriginalName: "a.mp4",
-		StorageKey: "videos/a.mp4", SizeBytes: 10, Status: events.StatusPending, CreatedAt: now, UpdatedAt: now}
-	msg := video.OutboxMessage{ID: uuid.NewString(), RoutingKey: events.RoutingKeyVideoUploaded, Payload: []byte(`{"video_id":"x"}`), CreatedAt: now}
-	if err := repo.CreateWithOutbox(c, v, msg); err != nil {
+	v := videodomain.Video{ID: uuid.NewString(), UserID: userID, UserEmail: "a@x.com", OriginalName: "a.mp4",
+		StorageKey: "videos/a.mp4", SizeBytes: 10, Status: videodomain.StatusPending, CreatedAt: now, UpdatedAt: now}
+	msg := usecase.OutgoingMessage{ID: uuid.NewString(), Topic: events.RoutingKeyVideoUploaded, Payload: []byte(`{"video_id":"x"}`), CreatedAt: now}
+	if err := repo.CreateAndEnqueue(c, v, msg); err != nil {
 		t.Fatal(err)
 	}
 
 	got, err := repo.Get(c, v.ID)
-	if err != nil || got.Status != events.StatusPending || got.ZipKey != "" {
+	if err != nil || got.Status != videodomain.StatusPending || got.ZipKey != "" {
 		t.Fatalf("Get: %+v %v", got, err)
 	}
-	if _, err := repo.Get(c, "not-a-uuid"); !errors.Is(err, video.ErrNotFound) {
+	if _, err := repo.Get(c, "not-a-uuid"); !errors.Is(err, videodomain.ErrNotFound) {
 		t.Fatalf("invalid id: %v", err)
 	}
-	if _, err := repo.Get(c, uuid.NewString()); !errors.Is(err, video.ErrNotFound) {
+	if _, err := repo.Get(c, uuid.NewString()); !errors.Is(err, videodomain.ErrNotFound) {
 		t.Fatalf("missing id: %v", err)
 	}
 
-	got.Status, got.ZipKey, got.FrameCount, got.UpdatedAt = events.StatusCompleted, "outputs/z.zip", 7, time.Now().UTC()
+	got.Status, got.ZipKey, got.FrameCount, got.UpdatedAt = videodomain.StatusCompleted, "outputs/z.zip", 7, time.Now().UTC()
 	if err := repo.Update(c, got); err != nil {
 		t.Fatal(err)
 	}
@@ -125,24 +129,24 @@ func TestVideoPostgresRepositoryAndOutbox(t *testing.T) {
 	}
 	missing := got
 	missing.ID = uuid.NewString()
-	if err := repo.Update(c, missing); !errors.Is(err, video.ErrNotFound) {
+	if err := repo.Update(c, missing); !errors.Is(err, videodomain.ErrNotFound) {
 		t.Fatalf("update missing: %v", err)
 	}
 
 	// Falha na publicação: a mensagem continua pendente.
-	n, err := repo.DispatchPending(c, 10, func(context.Context, video.OutboxMessage) error { return errors.New("broker down") })
+	n, err := repo.DispatchPending(c, 10, func(context.Context, usecase.OutgoingMessage) error { return errors.New("broker down") })
 	if n != 0 || err == nil {
 		t.Fatalf("failed dispatch: %d %v", n, err)
 	}
 	var published []string
-	n, err = repo.DispatchPending(c, 10, func(_ context.Context, m video.OutboxMessage) error {
+	n, err = repo.DispatchPending(c, 10, func(_ context.Context, m usecase.OutgoingMessage) error {
 		published = append(published, m.ID)
 		return nil
 	})
 	if err != nil || n != 1 || published[0] != msg.ID {
 		t.Fatalf("dispatch: %d %v %v", n, err, published)
 	}
-	n, _ = repo.DispatchPending(c, 10, func(context.Context, video.OutboxMessage) error { return nil })
+	n, _ = repo.DispatchPending(c, 10, func(context.Context, usecase.OutgoingMessage) error { return nil })
 	if n != 0 {
 		t.Fatalf("message must be published only once, got %d", n)
 	}
@@ -151,24 +155,24 @@ func TestVideoPostgresRepositoryAndOutbox(t *testing.T) {
 func TestRedisCache(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: env("TEST_REDIS_ADDR", "localhost:6379")})
 	t.Cleanup(func() { _ = rdb.Close() })
-	cache := video.NewRedisCache(rdb, time.Minute)
+	cache := videoredis.NewListCache(rdb, time.Minute)
 	c := ctx(t)
 	user := uuid.NewString()
 
-	if _, ok, err := cache.GetList(c, user); ok || err != nil {
+	if _, ok, err := cache.Get(c, user); ok || err != nil {
 		t.Fatalf("empty cache: %v %v", ok, err)
 	}
-	if err := cache.SetList(c, user, []video.Video{{ID: "v1", Status: events.StatusPending}}); err != nil {
+	if err := cache.Set(c, user, []videodomain.Video{{ID: "v1", Status: videodomain.StatusPending}}); err != nil {
 		t.Fatal(err)
 	}
-	list, ok, err := cache.GetList(c, user)
+	list, ok, err := cache.Get(c, user)
 	if err != nil || !ok || len(list) != 1 || list[0].ID != "v1" {
 		t.Fatalf("cached: %+v %v %v", list, ok, err)
 	}
 	if err := cache.Invalidate(c, user); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, _ := cache.GetList(c, user); ok {
+	if _, ok, _ := cache.Get(c, user); ok {
 		t.Fatal("cache should be invalidated")
 	}
 }

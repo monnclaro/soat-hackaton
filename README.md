@@ -38,7 +38,7 @@ Outras formas de executar (serviços na mão, sem Docker, Kubernetes) estão em 
 | [Como o sistema funciona](docs/how-it-works.md) | Microsserviços, mensageria, banco, resiliência e escalabilidade |
 | [Operação](docs/operations.md) | Observabilidade, Kubernetes e variáveis de ambiente |
 | [Qualidade](docs/quality.md) | Testes, CI/CD e fluxo de desenvolvimento |
-| [ADRs](docs/adr/README.md) | 12 decisões de arquitetura com contexto e alternativas |
+| [ADRs](docs/adr/README.md) | 13 decisões de arquitetura com contexto e alternativas |
 | [OpenAPI](docs/openapi.yaml) | Contrato da API |
 | [Script do banco](scripts/db/init.sql) | Criação dos bancos de dados |
 
@@ -91,6 +91,8 @@ flowchart LR
 
 A API **aceita** o vídeo rápido e de forma durável. O **processamento** acontece depois, em workers que escalam de forma independente, e a fila entre os dois absorve os picos. Detalhes em [docs/architecture.md](docs/architecture.md) e [docs/how-it-works.md](docs/how-it-works.md).
 
+Internamente, cada microsserviço segue **Clean Architecture**: `domain/` (entidades e regras), `usecase/` (casos de uso e as interfaces que eles exigem) e `adapter/` (HTTP, filas, banco, cache, ffmpeg, SMTP). As dependências apontam sempre para dentro, e um teste automático impede violações ([ADR 0013](docs/adr/0013-clean-architecture.md)).
+
 ## Stack
 
 | Camada | Tecnologia |
@@ -109,7 +111,8 @@ A API **aceita** o vídeo rápido e de forma durável. O **processamento** acont
 
 ```
 cmd/                 entrypoints dos 4 microsserviços
-internal/            auth, video, processor, notification, events, platform (infra compartilhada)
+internal/<serviço>/  Clean Architecture: domain/ (regras), usecase/ (casos de uso + portas), adapter/ (HTTP, filas, banco...)
+internal/            também: events (contratos), platform (drivers compartilhados), archtest (regra de dependência)
 web/                 UI (HTML, SCSS, módulos ES) compilada no build do gateway
 deploy/              gateway, prometheus, grafana, seaweedfs, k8s (base / local / optional)
 scripts/             init.sql do banco e e2e.sh

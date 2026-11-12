@@ -1,5 +1,6 @@
 // video-service: upload, listagem de status e download dos vídeos; publica jobs via outbox
 // e consome os eventos de status do processor-worker.
+// Este arquivo é a raiz de composição: cria os adaptadores e os injeta nos casos de uso.
 package main
 
 import (
@@ -13,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/monnclaro/soat-hackaton/internal/platform/config"
 	"github.com/monnclaro/soat-hackaton/internal/platform/httpx"
@@ -22,7 +23,11 @@ import (
 	"github.com/monnclaro/soat-hackaton/internal/platform/rabbitmq"
 	"github.com/monnclaro/soat-hackaton/internal/platform/security"
 	"github.com/monnclaro/soat-hackaton/internal/platform/storage"
-	"github.com/monnclaro/soat-hackaton/internal/video"
+	"github.com/monnclaro/soat-hackaton/internal/video/adapter/httpapi"
+	"github.com/monnclaro/soat-hackaton/internal/video/adapter/messaging"
+	videopg "github.com/monnclaro/soat-hackaton/internal/video/adapter/postgres"
+	videoredis "github.com/monnclaro/soat-hackaton/internal/video/adapter/redis"
+	"github.com/monnclaro/soat-hackaton/internal/video/usecase"
 )
 
 func main() {
@@ -50,11 +55,11 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	defer pool.Close()
-	if err := postgres.Migrate(startCtx, pool, video.Migration); err != nil {
+	if err := postgres.Migrate(startCtx, pool, videopg.Migration); err != nil {
 		return err
 	}
 
-	rdb := redis.NewClient(&redis.Options{Addr: config.String("REDIS_ADDR", "localhost:6379"), Password: config.String("REDIS_PASSWORD", "")})
+	rdb := goredis.NewClient(&goredis.Options{Addr: config.String("REDIS_ADDR", "localhost:6379"), Password: config.String("REDIS_PASSWORD", "")})
 	defer func() { _ = rdb.Close() }()
 
 	st, err := storage.New(startCtx, storage.Config{
@@ -83,11 +88,12 @@ func run(log *slog.Logger) error {
 	}
 	defer func() { _ = pub.Close() }()
 
-	repo := video.NewPostgresRepository(pool)
-	svc := video.NewService(repo, video.NewRedisCache(rdb, config.Duration("CACHE_TTL", 30*time.Second)), st, log)
+	// Adaptadores → casos de uso → controller HTTP / consumidor / relay.
+	repo := videopg.NewRepository(pool)
+	videos := usecase.NewVideos(repo, videoredis.NewListCache(rdb, config.Duration("CACHE_TTL", 30*time.Second)), st, log)
 
 	mux := http.NewServeMux()
-	video.NewHandler(svc, tokens, log, config.Int64("MAX_UPLOAD_BYTES", 1<<30)).Register(mux)
+	httpapi.NewHandler(videos, tokens, log, config.Int64("MAX_UPLOAD_BYTES", 1<<30)).Register(mux)
 	// Readiness só depende do que é essencial (Postgres e storage). O Redis é apenas cache:
 	// se cair, a listagem lê direto do Postgres, então não deve tirar o pod do balanceamento.
 	httpx.RegisterOps(mux, func(ctx context.Context) error {
@@ -100,11 +106,11 @@ func run(log *slog.Logger) error {
 	wg.Add(3)
 	go func() {
 		defer wg.Done()
-		video.NewOutboxRelay(repo, pub, config.Duration("OUTBOX_INTERVAL", time.Second), config.Int("OUTBOX_BATCH", 100), log).Run(ctx)
+		messaging.NewOutboxRelay(repo, pub, config.Duration("OUTBOX_INTERVAL", time.Second), config.Int("OUTBOX_BATCH", 100), log).Run(ctx)
 	}()
 	go func() {
 		defer wg.Done()
-		if err := rabbitmq.Consume(ctx, conn, rabbitmq.QueueStatusChanged, config.Int("CONSUMER_CONCURRENCY", 4), log, video.StatusHandler(svc)); err != nil {
+		if err := rabbitmq.Consume(ctx, conn, rabbitmq.QueueStatusChanged, config.Int("CONSUMER_CONCURRENCY", 4), log, messaging.StatusHandler(videos)); err != nil {
 			cancelAll(err)
 		}
 	}()
