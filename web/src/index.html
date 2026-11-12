@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>FIAP X · Processador de Vídeos</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="module" src="/assets/js/main.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="FIAP X - início">
+      <span class="brand__logo" aria-hidden="true">▶</span>
+      <span>FIAP <strong>X</strong></span>
+      <span class="brand__subtitle">Processador de Vídeos</span>
+    </a>
+    <div class="topbar__user" data-auth="in" hidden>
+      <span class="avatar" id="userAvatar" aria-hidden="true"></span>
+      <span class="topbar__name" id="userName"></span>
+      <button class="btn btn--ghost btn--sm" id="logoutBtn" type="button">Sair</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- ============================================================ Autenticação -->
+    <section class="auth" data-auth="out" hidden>
+      <div class="auth__intro">
+        <h1>Transforme vídeos em imagens.</h1>
+        <p>Envie um ou vários vídeos e receba um <strong>.zip com os frames</strong> de cada um. O processamento roda em paralelo e você acompanha o status em tempo real.</p>
+        <ul class="feature-list">
+          <li>Vários vídeos ao mesmo tempo</li>
+          <li>Status de cada envio</li>
+          <li>Aviso por e-mail se algo der errado</li>
+        </ul>
+      </div>
+
+      <div class="card auth__card">
+        <div class="tabs" role="tablist" aria-label="Acesso">
+          <button class="tabs__tab is-active" role="tab" aria-selected="true" aria-controls="loginForm" id="tabLogin" type="button">Entrar</button>
+          <button class="tabs__tab" role="tab" aria-selected="false" aria-controls="registerForm" id="tabRegister" type="button">Criar conta</button>
+        </div>
+
+        <form class="form" id="loginForm" role="tabpanel" aria-labelledby="tabLogin" novalidate>
+          <label class="field">
+            <span class="field__label">E-mail</span>
+            <input class="field__input" name="email" type="email" autocomplete="email" required>
+          </label>
+          <label class="field">
+            <span class="field__label">Senha</span>
+            <span class="field__password">
+              <input class="field__input" name="password" type="password" autocomplete="current-password" required>
+              <button class="field__toggle" type="button" data-toggle-password aria-label="Mostrar senha">👁</button>
+            </span>
+          </label>
+          <p class="form__error" role="alert"></p>
+          <button class="btn btn--primary btn--block" type="submit">Entrar</button>
+        </form>
+
+        <form class="form" id="registerForm" role="tabpanel" aria-labelledby="tabRegister" hidden novalidate>
+          <label class="field">
+            <span class="field__label">Nome</span>
+            <input class="field__input" name="name" autocomplete="name" maxlength="120" required>
+          </label>
+          <label class="field">
+            <span class="field__label">E-mail</span>
+            <input class="field__input" name="email" type="email" autocomplete="email" required>
+          </label>
+          <label class="field">
+            <span class="field__label">Senha <small>(mínimo de 8 caracteres)</small></span>
+            <span class="field__password">
+              <input class="field__input" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required>
+              <button class="field__toggle" type="button" data-toggle-password aria-label="Mostrar senha">👁</button>
+            </span>
+          </label>
+          <p class="form__error" role="alert"></p>
+          <button class="btn btn--primary btn--block" type="submit">Criar conta</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============================================================ Aplicação -->
+    <section class="app" data-auth="in" hidden>
+      <div class="stats" aria-label="Resumo dos seus vídeos">
+        <div class="stat"><span class="stat__value" id="statTotal">0</span><span class="stat__label">Vídeos</span></div>
+        <div class="stat stat--info"><span class="stat__value" id="statActive">0</span><span class="stat__label">Na fila / processando</span></div>
+        <div class="stat stat--ok"><span class="stat__value" id="statDone">0</span><span class="stat__label">Concluídos</span></div>
+        <div class="stat stat--err"><span class="stat__value" id="statFailed">0</span><span class="stat__label">Com falha</span></div>
+      </div>
+
+      <div class="card">
+        <h2 class="card__title">Enviar vídeos</h2>
+        <label class="dropzone" id="dropzone">
+          <input class="dropzone__input" id="fileInput" type="file" multiple
+                 accept="video/*,.mp4,.avi,.mov,.mkv,.webm,.wmv,.flv,.m4v">
+          <span class="dropzone__icon" aria-hidden="true">⬆</span>
+          <span class="dropzone__text"><strong>Arraste os vídeos aqui</strong> ou clique para selecionar</span>
+          <span class="dropzone__hint">mp4, avi, mov, mkv, webm, wmv, flv, m4v · até 1 GB cada</span>
+        </label>
+        <ul class="uploads" id="uploadList" aria-live="polite"></ul>
+      </div>
+
+      <div class="card">
+        <div class="card__header">
+          <h2 class="card__title">Meus vídeos</h2>
+          <div class="card__actions">
+            <span class="live" id="liveIndicator" hidden><span class="live__dot"></span>atualizando</span>
+            <button class="btn btn--ghost btn--sm" id="refreshBtn" type="button">Atualizar</button>
+          </div>
+        </div>
+        <div class="videos" id="videoList" aria-live="polite">
+          <p class="empty">Carregando...</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toasts" id="toasts" aria-live="assertive"></div>
+</body>
+</html>

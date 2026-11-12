@@ -1,0 +1,32 @@
+groups:
+  - name: fiapx
+    rules:
+      - alert: VideoQueueBacklog
+        expr: sum(rabbitmq_queue_messages_ready{queue="processor.video-uploaded"}) > 50
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Fila de vídeos acumulando (> 50 por 5 min) — escale o processor-worker"
+
+      - alert: DeadLetterMessages
+        expr: sum(rabbitmq_queue_messages_ready{queue="fiapx.dead-letter"}) > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Mensagens na DLQ — investigar falhas permanentes"
+
+      - alert: HighProcessingFailureRate
+        expr: |
+          sum(rate(fiapx_processor_jobs_total{result="failed"}[10m]))
+            / clamp_min(sum(rate(fiapx_processor_jobs_total{result=~"completed|failed"}[10m])), 0.001) > 0.2
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Mais de 20% dos vídeos falhando"
+
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} fora do ar"

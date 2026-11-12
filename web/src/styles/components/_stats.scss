@@ -1,0 +1,38 @@
+@use "../tokens" as *;
+@use "../mixins" as *;
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $space * 1.5;
+
+  @include up(md) {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.stat {
+  display: grid;
+  gap: 2px;
+  padding: $space * 2;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: $radius;
+
+  &__value {
+    font-size: 26px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__label {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  @each $tone in (info, ok, err) {
+    &--#{$tone} &__value {
+      color: var(--#{$tone});
+    }
+  }
+}

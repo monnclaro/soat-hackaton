@@ -1,0 +1,66 @@
+// Design tokens: definidos em SCSS e expostos como CSS custom properties
+// (assim o tema claro/escuro troca em tempo de execução).
+
+$light: (
+  bg: #f4f5f8,
+  surface: #ffffff,
+  surface-2: #f8f9fb,
+  border: #e3e6ec,
+  text: #1b1f29,
+  muted: #677084,
+  accent: #c8102e,
+  accent-hover: #a50d26,
+  accent-soft: #fde8eb,
+  ok: #15803d,
+  ok-soft: #e7f6ec,
+  info: #1d4ed8,
+  info-soft: #e8efff,
+  warn: #b45309,
+  warn-soft: #fff4e5,
+  err: #b91c1c,
+  err-soft: #fdecec,
+  shadow: (0 1px 2px rgb(16 24 40 / 6%), 0 4px 16px rgb(16 24 40 / 6%)),
+);
+
+$dark: (
+  bg: #0f1116,
+  surface: #181b22,
+  surface-2: #1f232c,
+  border: #2b303b,
+  text: #e8eaf0,
+  muted: #9aa2b1,
+  accent: #ef3b56,
+  accent-hover: #ff5a72,
+  accent-soft: #3a1820,
+  ok: #4ade80,
+  ok-soft: #12291b,
+  info: #7aa2ff,
+  info-soft: #16213d,
+  warn: #fbbf24,
+  warn-soft: #2e2410,
+  err: #f87171,
+  err-soft: #331617,
+  shadow: (0 1px 2px rgb(0 0 0 / 40%), 0 6px 20px rgb(0 0 0 / 30%)),
+);
+
+$radius: 12px;
+$radius-sm: 8px;
+$space: 8px;
+$font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+$transition: 150ms ease;
+
+@mixin theme($map) {
+  @each $name, $value in $map {
+    --#{$name}: #{$value};
+  }
+}
+
+:root {
+  @include theme($light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    @include theme($dark);
+  }
+}

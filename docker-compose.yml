@@ -1,0 +1,164 @@
+# Ambiente completo local: docker compose up -d --build
+#   UI + API (gateway) ..... http://localhost:8080
+#   RabbitMQ management .... http://localhost:15672 (guest/guest)
+#   S3 (SeaweedFS) ......... http://localhost:8333  (fiapx-access-key/fiapx-secret-key)
+#   Mailpit (e-mails) ...... http://localhost:8025
+#   Prometheus ............. http://localhost:9090
+#   Grafana ................ http://localhost:3000  (admin/admin)
+
+x-app-env: &app-env
+  LOG_LEVEL: info
+  JWT_SECRET: ${JWT_SECRET:-change-me-in-production-please-32+chars}
+  RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+  S3_ENDPOINT: s3:8333
+  S3_ACCESS_KEY: fiapx-access-key
+  S3_SECRET_KEY: fiapx-secret-key
+  S3_BUCKET: fiapx-videos
+
+services:
+  # ---------------------------------------------------------------- infraestrutura
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: fiapx
+      POSTGRES_PASSWORD: fiapx
+      POSTGRES_DB: postgres
+    ports: ["${POSTGRES_HOST_PORT:-5432}:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fiapx"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    ports: ["5672:5672", "15672:15672", "15692:15692"]
+    volumes: [rabbitdata:/var/lib/rabbitmq]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      retries: 20
+    restart: unless-stopped
+
+  # Object storage compatível com S3, self-hosted (SeaweedFS). Qualquer provedor compatível
+  # (Garage, Ceph, Cloudflare R2, Backblaze B2...) funciona trocando S3_ENDPOINT/credenciais.
+  s3:
+    image: chrislusf/seaweedfs:3.97
+    command: ["server", "-dir=/data", "-ip=s3", "-ip.bind=0.0.0.0", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json"]
+    ports: ["8333:8333"]
+    volumes:
+      - s3data:/data
+      - ./deploy/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/healthz || exit 1"]
+      interval: 5s
+      retries: 30
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports: ["8025:8025", "1025:1025"]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- microsserviços
+  auth-service:
+    build: { context: ., target: service, args: { SERVICE: auth-service } }
+    image: fiapx/auth-service:local
+    environment:
+      <<: *app-env
+      PORT: "8081"
+      DATABASE_URL: postgres://fiapx:fiapx@postgres:5432/fiapx_auth?sslmode=disable
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+
+  video-service:
+    build: { context: ., target: service, args: { SERVICE: video-service } }
+    image: fiapx/video-service:local
+    environment:
+      <<: *app-env
+      PORT: "8082"
+      DATABASE_URL: postgres://fiapx:fiapx@postgres:5432/fiapx_videos?sslmode=disable
+      REDIS_ADDR: redis:6379
+      MAX_UPLOAD_BYTES: "1073741824"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      s3: { condition: service_healthy }
+    restart: unless-stopped
+
+  processor-worker:
+    build: { context: ., target: worker, args: { SERVICE: processor-worker } }
+    image: fiapx/processor-worker:local
+    environment:
+      <<: *app-env
+      PORT: "8083"
+      WORKER_CONCURRENCY: "2"
+      FRAME_FPS: "1"
+      MAX_ATTEMPTS: "3"
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+      s3: { condition: service_healthy }
+    deploy:
+      replicas: 2 # 2 réplicas x 2 vídeos simultâneos = 4 vídeos em paralelo
+    stop_grace_period: 2m
+    restart: unless-stopped
+
+  notification-service:
+    build: { context: ., target: service, args: { SERVICE: notification-service } }
+    image: fiapx/notification-service:local
+    environment:
+      <<: *app-env
+      PORT: "8084"
+      SMTP_ADDR: mailpit:1025
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    restart: unless-stopped
+
+  gateway:
+    build: { context: ., dockerfile: deploy/gateway/Dockerfile }
+    image: fiapx/gateway:local
+    ports: ["8080:8080"]
+    depends_on: [auth-service, video-service]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- observabilidade
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    ports: ["9090:9090"]
+    volumes:
+      - ./deploy/prometheus:/etc/prometheus:ro
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [prometheus]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  rabbitdata:
+  s3data:

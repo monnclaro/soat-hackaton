@@ -1,0 +1,162 @@
+openapi: 3.0.3
+info:
+  title: FIAP X - API de Processamento de Vídeos
+  version: 1.0.0
+  description: |
+    API exposta pelo gateway. Rotas `/auth/*` → auth-service; `/api/*` → video-service.
+    O processamento é assíncrono: o upload retorna 202 e o status deve ser consultado via listagem.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: auth
+  - name: videos
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Cadastra um usuário
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201': { description: Criado, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Autentica e retorna um JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LoginResponse' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Usuário autenticado
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/videos:
+    post:
+      tags: [videos]
+      summary: Envia um vídeo para processamento
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [video]
+              properties:
+                video: { type: string, format: binary, description: 'mp4, avi, mov, mkv, webm, wmv, flv ou m4v' }
+      responses:
+        '202':
+          description: Aceito e enfileirado
+          headers:
+            Location: { schema: { type: string }, description: URL do recurso criado }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Video' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    get:
+      tags: [videos]
+      summary: Lista os vídeos do usuário e seus status
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  videos: { type: array, items: { $ref: '#/components/schemas/Video' } }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/videos/{id}:
+    get:
+      tags: [videos]
+      summary: Detalhe de um vídeo
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/VideoId' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Video' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/videos/{id}/download:
+    get:
+      tags: [videos]
+      summary: Baixa o ZIP com os frames (somente status COMPLETED)
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/VideoId' }]
+      responses:
+        '200': { description: ZIP, content: { application/zip: { schema: { type: string, format: binary } } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { description: Vídeo ainda não processado ou com falha, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    VideoId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: Erro
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      properties: { error: { type: string } }
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, maxLength: 120 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 72 }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        created_at: { type: string, format: date-time }
+    LoginResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_at: { type: string, format: date-time }
+        user: { $ref: '#/components/schemas/User' }
+    Video:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        original_name: { type: string }
+        status: { type: string, enum: [PENDING, PROCESSING, COMPLETED, FAILED] }
+        size_bytes: { type: integer, format: int64 }
+        frame_count: { type: integer }
+        error: { type: string, description: Presente quando FAILED }
+        download_url: { type: string, description: Presente quando COMPLETED }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }

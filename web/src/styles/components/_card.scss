@@ -1,0 +1,58 @@
+@use "../tokens" as *;
+
+.card {
+  padding: $space * 3;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: $radius;
+  box-shadow: var(--shadow);
+
+  &__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: $space * 1.5;
+    margin-bottom: $space * 2;
+  }
+
+  &__title {
+    font-size: 17px;
+  }
+
+  > .card__title {
+    margin-bottom: $space * 2;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: $space * 1.5;
+  }
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: $radius-sm;
+
+  &__tab {
+    padding: $space;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    transition: background $transition, color $transition;
+
+    &.is-active {
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+  }
+}

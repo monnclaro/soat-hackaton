@@ -1,0 +1,31 @@
+# Configuração não sensível compartilhada pelos serviços.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fiapx-config
+data:
+  LOG_LEVEL: info
+  REDIS_ADDR: redis:6379
+  S3_ENDPOINT: s3:8333
+  S3_BUCKET: fiapx-videos
+  S3_REGION: us-east-1
+  S3_USE_SSL: "false"
+  SMTP_ADDR: mailpit:1025
+  SMTP_FROM: "FIAP X <no-reply@fiapx.local>"
+  RABBITMQ_DELIVERY_LIMIT: "5"
+  MAX_UPLOAD_BYTES: "1073741824"
+---
+# Segredos: em produção, gerencie via External Secrets / Sealed Secrets / Secrets Manager.
+# Os valores abaixo servem apenas ao ambiente local (minikube/kind).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fiapx-secrets
+type: Opaque
+stringData:
+  JWT_SECRET: change-me-in-production-please-32+chars
+  AUTH_DATABASE_URL: postgres://fiapx:fiapx@postgres:5432/fiapx_auth?sslmode=disable
+  VIDEO_DATABASE_URL: postgres://fiapx:fiapx@postgres:5432/fiapx_videos?sslmode=disable
+  RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+  S3_ACCESS_KEY: fiapx-access-key
+  S3_SECRET_KEY: fiapx-secret-key

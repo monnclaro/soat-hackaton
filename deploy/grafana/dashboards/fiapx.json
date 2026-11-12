@@ -1,0 +1,89 @@
+{
+  "uid": "fiapx-overview",
+  "title": "FIAP X - Processamento de Vídeos",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "tags": ["fiapx"],
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Vídeos em processamento agora",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(fiapx_processor_jobs_in_flight)" }]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Fila de vídeos aguardando",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(rabbitmq_queue_messages_ready{queue=\"processor.video-uploaded\"}) or vector(0)" }]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Mensagens na DLQ",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } },
+      "targets": [{ "refId": "A", "expr": "sum(rabbitmq_queue_messages_ready{queue=\"fiapx.dead-letter\"}) or vector(0)" }]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Réplicas do worker ativas",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(up{job=\"processor-worker\"})" }]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Uploads x processamentos (por minuto)",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (result) (rate(fiapx_video_uploads_total[1m])) * 60", "legendFormat": "upload {{result}}" },
+        { "refId": "B", "expr": "sum by (result) (rate(fiapx_processor_jobs_total[1m])) * 60", "legendFormat": "job {{result}}" }
+      ]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Profundidade das filas",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (queue) (rabbitmq_queue_messages_ready)", "legendFormat": "ready {{queue}}" },
+        { "refId": "B", "expr": "sum by (queue) (rabbitmq_queue_messages_unacked)", "legendFormat": "unacked {{queue}}" }
+      ]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Duração do processamento (p50 / p95)",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.5, sum by (le) (rate(fiapx_processor_job_duration_seconds_bucket[5m])))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(fiapx_processor_job_duration_seconds_bucket[5m])))", "legendFormat": "p95" }
+      ]
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "HTTP - requisições/s por rota e status",
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (job, route, status) (rate(http_requests_total{route!~\"GET /(metrics|healthz|readyz)\"}[1m]))", "legendFormat": "{{job}} {{route}} {{status}}" }
+      ]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "HTTP - latência p95",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_request_duration_seconds_bucket{route!~\"GET /(metrics|healthz|readyz)\"}[5m])))", "legendFormat": "{{job}}" }
+      ]
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "Notificações de falha",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (result) (increase(fiapx_notifications_total[5m]))", "legendFormat": "{{result}}" }
+      ]
+    }
+  ]
+}

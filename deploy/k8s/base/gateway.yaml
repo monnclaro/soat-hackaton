@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels: { app: gateway }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: gateway }
+  template:
+    metadata:
+      labels: { app: gateway }
+    spec:
+      containers:
+        - name: gateway
+          image: fiapx/gateway
+          ports: [{ containerPort: 8080, name: http }]
+          env:
+            # O resolver do nginx não usa os search domains do Pod: use o FQDN.
+            - { name: AUTH_UPSTREAM, value: auth-service.fiapx.svc.cluster.local:8081 }
+            - { name: VIDEO_UPSTREAM, value: video-service.fiapx.svc.cluster.local:8082 }
+          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 10 }
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { cpu: 500m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  type: LoadBalancer
+  selector: { app: gateway }
+  ports: [{ port: 80, targetPort: http, name: http }]

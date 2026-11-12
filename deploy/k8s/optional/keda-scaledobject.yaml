@@ -1,0 +1,36 @@
+# Opcional (requer KEDA instalado no cluster): escala o processor-worker pela profundidade da
+# fila em vez de CPU — reage ao pico antes mesmo de os pods existentes saturarem.
+# Ao usar, remova o HPA de CPU do processor-worker (o KEDA cria o seu próprio HPA).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keda-rabbitmq
+  namespace: fiapx
+stringData:
+  host: amqp://guest:guest@rabbitmq.fiapx.svc.cluster.local:5672/
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-rabbitmq
+  namespace: fiapx
+spec:
+  secretTargetRef:
+    - { parameter: host, name: keda-rabbitmq, key: host }
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: processor-worker
+  namespace: fiapx
+spec:
+  scaleTargetRef: { name: processor-worker }
+  minReplicaCount: 1
+  maxReplicaCount: 20
+  triggers:
+    - type: rabbitmq
+      metadata:
+        queueName: processor.video-uploaded
+        mode: QueueLength
+        value: "4" # ~4 vídeos na fila por réplica
+      authenticationRef: { name: keda-rabbitmq }

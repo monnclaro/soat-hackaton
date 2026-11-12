@@ -1,0 +1,42 @@
+# API Gateway / reverse proxy: ponto único de entrada (UI + APIs).
+# Template processado pelo entrypoint da imagem nginx (envsubst):
+#   AUTH_UPSTREAM / VIDEO_UPSTREAM  → host:porta dos serviços
+#   NGINX_LOCAL_RESOLVERS           → DNS do container (Docker ou CoreDNS do K8s)
+# Os upstreams são re-resolvidos a cada 10s, então réplicas novas/recriadas entram no balanceamento.
+server {
+    listen 8080;
+    server_name _;
+
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+    set $auth_service  http://${AUTH_UPSTREAM};
+    set $video_service http://${VIDEO_UPSTREAM};
+
+    # Uploads grandes vão em streaming direto para o video-service (sem buffer no gateway).
+    client_max_body_size 1g;
+
+    location = /healthz {
+        access_log off;
+        return 200 "ok";
+    }
+
+    location /auth/ {
+        proxy_pass $auth_service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /api/ {
+        proxy_pass $video_service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
+    location / {
+        root /usr/share/nginx/html;
+        try_files $uri /index.html;
+    }
+}

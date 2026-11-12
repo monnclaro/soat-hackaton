@@ -10,3 +10,7 @@ coverage.out
 .idea/
 .vscode/
 .DS_Store
+
+# UI
+web/node_modules/
+web/dist/

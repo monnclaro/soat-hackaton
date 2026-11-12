@@ -1,0 +1,145 @@
+@use "tokens" as *;
+@use "mixins" as *;
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space * 2;
+  padding: $space * 1.5 $space * 3;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+
+  &__user {
+    display: flex;
+    align-items: center;
+    gap: $space * 1.25;
+  }
+
+  &__name {
+    @include truncate;
+    max-width: 180px;
+    font-weight: 500;
+
+    @include down(sm) {
+      display: none;
+    }
+  }
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: $space;
+  font-size: 18px;
+  text-decoration: none;
+
+  strong {
+    color: var(--accent);
+  }
+
+  &__logo {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+    color: #fff;
+    background: var(--accent);
+    border-radius: $radius-sm;
+  }
+
+  &__subtitle {
+    margin-left: $space * 0.5;
+    font-size: 14px;
+    color: var(--muted);
+
+    @include down(sm) {
+      display: none;
+    }
+  }
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 50%;
+}
+
+.container {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: $space * 4 $space * 2 $space * 8;
+}
+
+// ---------------------------------------------------------------- tela de acesso
+.auth {
+  display: grid;
+  gap: $space * 4;
+  align-items: center;
+  min-height: calc(100vh - 180px);
+
+  @include up(md) {
+    grid-template-columns: 1.1fr 1fr;
+    gap: $space * 8;
+  }
+
+  &__intro {
+    h1 {
+      font-size: clamp(28px, 4vw, 40px);
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      margin-top: $space * 2;
+      font-size: 17px;
+      color: var(--muted);
+    }
+  }
+
+  &__card {
+    padding: $space * 3;
+  }
+}
+
+.feature-list {
+  display: grid;
+  gap: $space;
+  margin: $space * 3 0 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: $space;
+
+    &::before {
+      content: "✓";
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 50%;
+      @include tone(ok);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- área logada
+.app {
+  display: grid;
+  gap: $space * 3;
+}
