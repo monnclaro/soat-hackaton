@@ -69,24 +69,28 @@ sequenceDiagram
     participant Q as RabbitMQ
     participant W as processor-worker
 
-    U->>V: POST /api/videos (multipart, JWT)
-    V->>S: PutObject (streaming)
-    V->>DB: BEGIN; INSERT videos(PENDING); INSERT outbox; COMMIT
-    V-->>U: 202 Accepted {id, status: PENDING}
-    loop a cada 1s (ou imediatamente se o lote veio cheio)
-        R->>DB: SELECT ... FOR UPDATE SKIP LOCKED
-        R->>Q: publish video.uploaded (confirm)
-        R->>DB: UPDATE outbox SET published_at
+    U->>V: POST /api/videos (multipart + JWT)
+    V->>S: grava o vídeo (streaming)
+    V->>DB: transação: INSERT videos (PENDING) + INSERT outbox
+    V-->>U: 202 Accepted (id, status PENDING)
+    loop a cada 1s, ou na hora se o lote veio cheio
+        R->>DB: lê mensagens pendentes (FOR UPDATE SKIP LOCKED)
+        R->>Q: publica video.uploaded (com confirmação)
+        R->>DB: marca a mensagem como publicada
     end
-    Q->>W: deliver (prefetch N)
+    Q->>W: entrega a mensagem (prefetch N)
     W->>Q: video.status.processing
-    W->>S: GetObject → ffmpeg → zip → PutObject
-    W->>Q: video.status.completed {zip_key, frame_count}
+    W->>S: baixa o vídeo
+    Note over W: ffmpeg extrai os frames e gera o ZIP
+    W->>S: grava o ZIP
+    W->>Q: video.status.completed (zip_key, frame_count)
     W-->>Q: ack
-    Q->>V: video.status.* → UPDATE videos + invalida cache
+    Q->>V: video.status.*
+    Note over V: atualiza o vídeo no banco e invalida o cache
     U->>V: GET /api/videos (polling da UI)
     U->>V: GET /api/videos/{id}/download
-    V->>S: GetObject (stream do ZIP)
+    V->>S: lê o ZIP (streaming)
+    V-->>U: frames.zip
 ```
 
 ### 4.2 Falha e notificação
