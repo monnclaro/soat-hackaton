@@ -1,12 +1,13 @@
 # Gateway: nginx + UI web. Build a partir da raiz do repositório:
 #   docker build -f deploy/gateway/Dockerfile -t fiapx/gateway .
 
-# 1) Compila a UI (SCSS → CSS, cópia de HTML/JS para dist/).
+# 1) Compila a UI React (checagem de tipos TypeScript + build de produção do Vite em dist/).
 FROM node:22-alpine AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
-COPY web/build.mjs ./
+COPY web/index.html web/tsconfig.json web/tsconfig.node.json web/vite.config.ts ./
+COPY web/public ./public
 COPY web/src ./src
 RUN npm run build
 

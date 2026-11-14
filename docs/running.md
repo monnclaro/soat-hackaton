@@ -188,7 +188,7 @@ Cada componente é instalado e executado diretamente no sistema operacional.
 | RabbitMQ 4 | [guia oficial](https://www.rabbitmq.com/docs/install-debian) | `brew install rabbitmq` | `choco install rabbitmq` (instala o Erlang junto) |
 | SeaweedFS (S3) | binário `weed` em https://github.com/seaweedfs/seaweedfs/releases | `brew install seaweedfs` | binário `weed.exe` nas releases |
 | Mailpit (SMTP de teste) | binário em https://github.com/axllent/mailpit/releases | `brew install mailpit` | binário `mailpit.exe` nas releases |
-| Node.js 20+ (para a UI) | https://nodejs.org | `brew install node` | `winget install OpenJS.NodeJS.LTS` |
+| Node.js 22+ (para a UI) | https://nodejs.org | `brew install node` | `winget install OpenJS.NodeJS.LTS` |
 | nginx (para a UI) | `sudo apt install nginx` | `brew install nginx` | https://nginx.org/en/download.html |
 
 **Passo 2. Criar o usuário e os bancos no PostgreSQL**
@@ -254,7 +254,7 @@ Compile a UI e sirva com um nginx local usando a mesma configuração do gateway
    ```bash
    cd web
    npm ci
-   npm run build        # gera web/dist (SCSS compilado + HTML + JS)
+   npm run build        # checa os tipos e gera web/dist (build de produção do Vite)
    cd ..
    ```
 2. Copie [deploy/gateway/default.conf.template](../deploy/gateway/default.conf.template) para a pasta de configuração do nginx (ex.: `/etc/nginx/conf.d/fiapx.conf`).

@@ -15,3 +15,4 @@
 | [0011](./0011-observabilidade-prometheus-grafana.md) | Observabilidade com Prometheus + Grafana | Aceito |
 | [0012](./0012-seaweedfs-no-ambiente-local.md) | SeaweedFS como S3 no ambiente local | Aceito |
 | [0013](./0013-clean-architecture.md) | Clean Architecture em cada microsserviço (domain / usecase / adapter) | Aceito |
+| [0014](./0014-frontend-react.md) | Front-end em React + TypeScript (Vite) | Aceito |
