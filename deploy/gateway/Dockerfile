@@ -6,7 +6,7 @@ FROM node:22-alpine AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
-COPY web/index.html web/tsconfig.json web/vite.config.ts ./
+COPY web/index.html web/tsconfig.json web/tsconfig.node.json web/vite.config.ts ./
 COPY web/public ./public
 COPY web/src ./src
 RUN npm run build
