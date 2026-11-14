@@ -35,8 +35,19 @@ server {
         proxy_send_timeout 600s;
     }
 
+    # Arquivos gerados pelo Vite têm hash no nome: podem ficar em cache "para sempre".
+    location /assets/ {
+        root /usr/share/nginx/html;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # SPA React: qualquer outra rota devolve o index.html, que sempre é revalidado
+    # (garante que o navegador pegue a versão nova após um deploy).
     location / {
         root /usr/share/nginx/html;
+        add_header Cache-Control "no-cache";
         try_files $uri /index.html;
     }
 }

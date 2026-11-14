@@ -12,7 +12,7 @@ Diagramas de arquitetura, sequência e modelo de dados em [architecture.md](arch
 ## Microsserviços
 
 ### gateway (nginx)
-- Ponto único de entrada na porta **8080**; serve a **UI web** (`web/`: HTML + SCSS + módulos ES, compilada no build da imagem).
+- Ponto único de entrada na porta **8080**; serve o **front-end React** (`web/`: React + TypeScript + SCSS, compilado com Vite no build da imagem).
 - Roteia `/auth/*` → auth-service e `/api/*` → video-service.
 - Upload em **streaming** (`proxy_request_buffering off`), limite de 1 GiB.
 - Re-resolve o DNS dos serviços a cada 10s, então réplicas novas entram no balanceamento.

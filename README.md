@@ -38,7 +38,7 @@ Outras formas de executar (serviços na mão, sem Docker, Kubernetes) estão em 
 | [Como o sistema funciona](docs/how-it-works.md) | Microsserviços, mensageria, banco, resiliência e escalabilidade |
 | [Operação](docs/operations.md) | Observabilidade, Kubernetes e variáveis de ambiente |
 | [Qualidade](docs/quality.md) | Testes, CI/CD e fluxo de desenvolvimento |
-| [ADRs](docs/adr/README.md) | 13 decisões de arquitetura com contexto e alternativas |
+| [ADRs](docs/adr/README.md) | 14 decisões de arquitetura com contexto e alternativas |
 | [OpenAPI](docs/openapi.yaml) | Contrato da API |
 | [Script do banco](scripts/db/init.sql) | Criação dos bancos de dados |
 
@@ -102,7 +102,7 @@ Internamente, cada microsserviço segue **Clean Architecture**: `domain/` (entid
 | Dados | PostgreSQL 17 (um banco por serviço) + Redis 7 |
 | Arquivos | Armazenamento compatível com S3 (SeaweedFS self-hosted; sem dependência de nuvem) |
 | Processamento | ffmpeg |
-| UI | HTML + SCSS + JavaScript (módulos ES), servida por nginx 1.30 |
+| Front-end | React 19 + TypeScript + Vite, estilos em SCSS, testes com Vitest + Testing Library; servido por nginx 1.30 |
 | Observabilidade | Prometheus + Grafana (dashboard e alertas provisionados) |
 | Infraestrutura | Docker, Docker Compose, Kubernetes (Kustomize) |
 | CI/CD | GitHub Actions + GHCR |
@@ -113,7 +113,7 @@ Internamente, cada microsserviço segue **Clean Architecture**: `domain/` (entid
 cmd/                 entrypoints dos 4 microsserviços
 internal/<serviço>/  Clean Architecture: domain/ (regras), usecase/ (casos de uso + portas), adapter/ (HTTP, filas, banco...)
 internal/            também: events (contratos), platform (drivers compartilhados), archtest (regra de dependência)
-web/                 UI (HTML, SCSS, módulos ES) compilada no build do gateway
+web/                 front-end React + TypeScript (Vite), compilado no build do gateway
 deploy/              gateway, prometheus, grafana, seaweedfs, k8s (base / local / optional)
 scripts/             init.sql do banco e e2e.sh
 docs/                documentação, ADRs e OpenAPI
