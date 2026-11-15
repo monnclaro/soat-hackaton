@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
-import { mockFetch, user, video } from "./test/fakes";
+import { mockFetch, user, video } from "@/test/fakes";
 
 const session = { token: "tok-123", user };
 

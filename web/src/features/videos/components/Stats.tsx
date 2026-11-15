@@ -1,10 +1,11 @@
-import { ACTIVE_STATUSES, type Video } from "../api/types";
+import { isActive, type Video } from "../types";
 
+/** Contadores do topo: total, em andamento, concluídos e com falha. */
 export function Stats({ videos }: { videos: Video[] }) {
   const count = (pred: (v: Video) => boolean) => videos.filter(pred).length;
   const items = [
     { label: "Vídeos", value: videos.length, tone: "" },
-    { label: "Na fila / processando", value: count((v) => ACTIVE_STATUSES.includes(v.status)), tone: "info" },
+    { label: "Na fila / processando", value: count(isActive), tone: "info" },
     { label: "Concluídos", value: count((v) => v.status === "COMPLETED"), tone: "ok" },
     { label: "Com falha", value: count((v) => v.status === "FAILED"), tone: "err" },
   ];

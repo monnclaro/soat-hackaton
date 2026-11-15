@@ -1,8 +1,8 @@
-import { AuthPage } from "./components/AuthPage";
-import { Dashboard } from "./components/Dashboard";
-import { Topbar } from "./components/Topbar";
-import { SessionProvider, useSession } from "./session/SessionContext";
-import { ToastProvider } from "./toast/ToastContext";
+// Raiz da aplicação: providers globais + escolha entre a tela de acesso e a área logada.
+import { AuthPage, SessionProvider, useSession } from "@/features/auth";
+import { Dashboard } from "@/features/videos";
+import { ToastProvider } from "@/shared/toast/ToastProvider";
+import { Topbar } from "./Topbar";
 
 function Shell() {
   const { session } = useSession();

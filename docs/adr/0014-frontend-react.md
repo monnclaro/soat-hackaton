@@ -10,7 +10,8 @@ A primeira versão da interface era HTML + SCSS + JavaScript (módulos ES) sem f
 
 Reescrever a UI em **React 19 + TypeScript**, com build pelo **Vite**, mantendo os estilos em **SCSS**:
 
-- **Componentes:** `AuthPage` (abas de login/cadastro), `Dashboard`, `Stats`, `UploadPanel`, `VideoList`/`VideoCard`, `Topbar`, `PasswordField`.
+- **Organização por funcionalidade:** `app/` (composição), `features/auth` e `features/videos` (cada uma com `api`, `types`, `hooks`, `components` e um `index.ts` como API pública) e `shared/` (HTTP, avisos, formatação). Um teste de arquitetura impede que `shared/` dependa de features e que uma feature use arquivos internos de outra.
+- **Componentes:** `AuthPage`, `LoginForm`, `RegisterForm`, `PasswordField`, `Dashboard`, `Stats`, `UploadPanel`, `VideoList`, `VideoCard`, `Topbar`.
 - **Estado compartilhado** via Context: `SessionProvider` (token + usuário no `localStorage`) e `ToastProvider` (avisos).
 - **Hook `useVideos`:** listagem com atualização adaptativa (3s com vídeos em andamento, 20s sem, pausada em segundo plano) e detecção de mudança de status.
 - **Cliente da API tipado** (`src/api`), espelhando o `docs/openapi.yaml`.

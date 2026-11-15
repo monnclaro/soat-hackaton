@@ -1,5 +1,5 @@
-import { initials } from "../lib/format";
-import { useSession } from "../session/SessionContext";
+import { useSession } from "@/features/auth";
+import { initials } from "@/shared/lib/format";
 
 export function Topbar() {
   const { session, end } = useSession();

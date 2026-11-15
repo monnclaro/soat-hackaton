@@ -1,6 +1,6 @@
 // Sessão do usuário (token JWT + dados básicos), persistida no localStorage.
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import type { User } from "../api/types";
+import type { User } from "./types";
 
 export interface Session {
   token: string;
