@@ -1,9 +1,10 @@
 // Envio de vídeos: arrastar e soltar ou seleção múltipla, envios em paralelo com progresso.
 import { useRef, useState, type DragEvent } from "react";
-import { api, isUnauthorized } from "../api/client";
-import { formatBytes } from "../lib/format";
+import { errorMessage, isUnauthorized } from "@/shared/api/http";
+import { formatBytes } from "@/shared/lib/format";
+import { useToast } from "@/shared/toast/ToastProvider";
+import { videosApi } from "../api";
 import { validateVideoFile } from "../lib/files";
-import { useToast } from "../toast/ToastContext";
 
 type UploadState = "waiting" | "uploading" | "done" | "error";
 
@@ -41,7 +42,7 @@ export function UploadPanel({ token, onUploaded, onUnauthorized }: Props) {
     }
     update(id, { state: "uploading", message: "Enviando 0%" });
     try {
-      await api.uploadVideo(token, file, (fraction) => {
+      await videosApi.upload(token, file, (fraction) => {
         const pct = Math.round(fraction * 100);
         update(id, { progress: fraction, message: pct < 100 ? `Enviando ${pct}%` : "Finalizando..." });
       });
@@ -50,7 +51,7 @@ export function UploadPanel({ token, onUploaded, onUnauthorized }: Props) {
       return true;
     } catch (err) {
       if (isUnauthorized(err)) onUnauthorized();
-      update(id, { state: "error", progress: 1, message: `Erro: ${err instanceof Error ? err.message : String(err)}` });
+      update(id, { state: "error", progress: 1, message: `Erro: ${errorMessage(err)}` });
       return false;
     }
   }

@@ -1,5 +1,5 @@
-// Avisos flutuantes (canto inferior direito).
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+// Avisos flutuantes (canto inferior direito), disponíveis para toda a aplicação.
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
 export type ToastTone = "ok" | "info" | "err";
 
@@ -9,7 +9,7 @@ interface Toast {
   tone: ToastTone;
 }
 
-type Notify = (message: string, tone?: ToastTone, durationMs?: number) => void;
+export type Notify = (message: string, tone?: ToastTone, durationMs?: number) => void;
 
 const ToastContext = createContext<Notify | null>(null);
 
@@ -24,10 +24,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), durationMs);
   }, []);
 
-  const value = useMemo(() => notify, [notify]);
-
   return (
-    <ToastContext.Provider value={value}>
+    <ToastContext.Provider value={notify}>
       {children}
       <div className="toasts" aria-live="assertive">
         {toasts.map((t) => (

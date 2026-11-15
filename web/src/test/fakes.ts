@@ -1,6 +1,6 @@
 // Simulações de fetch e XMLHttpRequest para os testes de componentes.
 import { vi } from "vitest";
-import type { Video } from "../api/types";
+import type { Video } from "@/features/videos";
 
 export type Route = (init?: RequestInit) => { status: number; body?: unknown };
 

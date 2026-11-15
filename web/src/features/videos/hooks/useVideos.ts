@@ -2,8 +2,9 @@
 // a cada 3s enquanto houver vídeo na fila/processando, a cada 20s caso contrário,
 // e pausada quando a aba fica em segundo plano.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, isUnauthorized } from "../api/client";
-import { ACTIVE_STATUSES, type Video, type VideoStatus } from "../api/types";
+import { errorMessage, isUnauthorized } from "@/shared/api/http";
+import { videosApi } from "../api";
+import { isActive, type Video, type VideoStatus } from "../types";
 
 export const FAST_POLL_MS = 3000;
 export const SLOW_POLL_MS = 20000;
@@ -37,14 +38,14 @@ export function useVideos(token: string, options: Options): VideosState {
     clearTimeout(timer.current);
     let active = false;
     try {
-      const list = await api.listVideos(token);
+      const list = await videosApi.list(token);
       if (stopped.current) return;
       for (const v of list) {
         const prev = lastStatus.current.get(v.id);
         if (prev && prev !== v.status) optionsRef.current.onTransition?.(v, prev);
       }
       lastStatus.current = new Map(list.map((v) => [v.id, v.status]));
-      active = list.some((v) => ACTIVE_STATUSES.includes(v.status));
+      active = list.some(isActive);
       setVideos(list);
       setLoaded(true);
     } catch (err) {
@@ -53,7 +54,7 @@ export function useVideos(token: string, options: Options): VideosState {
         optionsRef.current.onUnauthorized();
         return;
       }
-      optionsRef.current.onError?.(err instanceof Error ? err.message : String(err));
+      optionsRef.current.onError?.(errorMessage(err));
     }
     if (!stopped.current && !document.hidden) {
       timer.current = setTimeout(tick, active ? FAST_POLL_MS : SLOW_POLL_MS);
@@ -78,6 +79,6 @@ export function useVideos(token: string, options: Options): VideosState {
   }, [tick]);
 
   const refresh = useCallback(() => void tick(), [tick]);
-  const active = videos.some((v) => ACTIVE_STATUSES.includes(v.status));
+  const active = videos.some(isActive);
   return { videos, loaded, active, refresh };
 }

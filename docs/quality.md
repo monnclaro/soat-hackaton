@@ -90,15 +90,37 @@ npm run build        # build de produção em web/dist
 
 Para apontar a outro endereço, use `API_URL` (ex.: `API_URL=http://localhost:8082 npm run dev`). No Compose, para ver as alterações na imagem, reconstrua o gateway: `docker compose up -d --build gateway`.
 
-Estrutura do `web/src`:
+Estrutura do `web/src`, organizada **por funcionalidade** (feature-based):
 
 ```
-api/          cliente HTTP tipado e tipos (espelham docs/openapi.yaml)
-session/      SessionProvider: token e usuário no localStorage
-toast/        ToastProvider: avisos na tela
-hooks/        useVideos: listagem com atualização automática e detecção de mudança de status
-components/   AuthPage, Dashboard, Stats, UploadPanel, VideoList, Topbar, PasswordField
-lib/          formatação e validação de arquivos
-styles/       SCSS (tokens de tema claro/escuro, mixins, componentes)
-test/         setup e simulações de fetch/XMLHttpRequest
+main.tsx                 ponto de entrada (monta o React e importa os estilos)
+app/                     composição da aplicação
+  App.tsx                providers globais + escolha entre login e área logada
+  Topbar.tsx             barra superior (usuário logado, sair)
+features/
+  auth/                  identidade
+    index.ts             API pública da feature (AuthPage, SessionProvider, useSession)
+    api.ts  types.ts     chamadas /auth/* e tipos (User, LoginResponse)
+    session.tsx          sessão (token + usuário no localStorage)
+    hooks/useFormSubmit  validação e envio de formulários
+    components/          AuthPage, LoginForm, RegisterForm, PasswordField
+  videos/                vídeos
+    index.ts             API pública da feature (Dashboard)
+    api.ts  types.ts     chamadas /api/videos/* (lista, upload com progresso, download) e tipos
+    hooks/useVideos      listagem com atualização automática e detecção de mudança de status
+    lib/files            validação de arquivos e nome do ZIP
+    components/          Dashboard, Stats, UploadPanel, VideoList, VideoCard
+shared/                  código reutilizável, sem regra de negócio
+  api/http.ts            request, ApiError, cabeçalho de autenticação
+  toast/                 ToastProvider (avisos)
+  lib/format.ts          bytes, tempo relativo, iniciais
+styles/                  SCSS (tokens de tema claro/escuro, mixins, componentes)
+test/                    setup, simulações de fetch/XMLHttpRequest e teste de arquitetura
 ```
+
+Regras de dependência (verificadas por `src/test/architecture.test.ts`, que roda com os demais testes):
+- `app/` pode usar `features/` e `shared/`;
+- uma feature usa outra **só pela API pública** (`@/features/auth`), nunca por arquivos internos;
+- `shared/` não depende de `features/` nem de `app/`.
+
+Imports usam o alias `@/` (= `src/`), configurado em `tsconfig.json` e `vite.config.ts`. Os testes ficam ao lado do código que testam (`*.test.ts(x)`).

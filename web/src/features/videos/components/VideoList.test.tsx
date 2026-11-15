@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ToastProvider } from "../toast/ToastContext";
-import { mockFetch, video } from "../test/fakes";
+import { ToastProvider } from "@/shared/toast/ToastProvider";
+import { mockFetch, video } from "@/test/fakes";
 import { VideoList } from "./VideoList";
 
 function renderList(videos = [video()], extra: Partial<Parameters<typeof VideoList>[0]> = {}) {

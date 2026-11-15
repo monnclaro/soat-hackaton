@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ToastProvider } from "../toast/ToastContext";
-import { FakeXHR, installFakeXHR } from "../test/fakes";
+import { ToastProvider } from "@/shared/toast/ToastProvider";
+import { FakeXHR, installFakeXHR } from "@/test/fakes";
 import { UploadPanel } from "./UploadPanel";
 
 function setup() {

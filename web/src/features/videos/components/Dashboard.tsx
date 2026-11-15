@@ -1,9 +1,8 @@
 // Área logada: contadores, envio e lista de vídeos.
 import { useCallback } from "react";
+import { useSession, type Session } from "@/features/auth";
+import { useToast } from "@/shared/toast/ToastProvider";
 import { useVideos } from "../hooks/useVideos";
-import type { Session } from "../session/SessionContext";
-import { useSession } from "../session/SessionContext";
-import { useToast } from "../toast/ToastContext";
 import { Stats } from "./Stats";
 import { UploadPanel } from "./UploadPanel";
 import { VideoList } from "./VideoList";
